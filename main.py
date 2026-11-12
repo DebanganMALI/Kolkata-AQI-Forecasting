@@ -11,6 +11,7 @@ Run from the project root (with the .venv activated):
     python main.py predict      # forecast the day after the dataset ends
     python main.py predict --date 2020-01-15   # forecast a past date and compare
     python main.py all          # everything above, in order (the full demo)
+    python main.py compare      # 5 model families, with and without weather -> reports/model_comparison.md
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from src import config  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kolkata next-day AQI forecasting")
     parser.add_argument("command", choices=["audit", "preprocess", "baseline", "train",
-                                            "evaluate", "predict", "all"])
+                                            "evaluate", "predict", "all", "compare"])
     parser.add_argument("--date", help="for predict: date to forecast (YYYY-MM-DD)")
     parser.add_argument("--device", default=config.DEVICE, choices=["cpu", "mps", "auto"],
                         help="cpu (repeatable, default), mps (Apple GPU) or auto")
@@ -70,6 +71,11 @@ def main() -> None:
             print_forecast(forecast(None, device_name=args.device))           # day after data ends
         else:
             print_forecast(forecast(args.date, device_name=args.device))
+
+    if cmd == "compare":
+        from src.compare import run_comparison
+        print("\n### 7. Model comparison: 5 forecasters, with and without weather")
+        run_comparison()
 
 
 if __name__ == "__main__":

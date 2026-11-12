@@ -123,3 +123,56 @@ BOOTSTRAP_RESAMPLES = 2000
 BOOTSTRAP_BLOCK_DAYS = 7
 
 LOCKDOWN_START = "2020-03-25"  # external fact (India national lockdown), used only to label periods
+
+
+# ---------------------------------------------------------------------------
+# Model comparison with weather  (python main.py compare)
+# Fixed BEFORE the comparison was run. See src/compare.py and
+# reports/model_comparison.md.
+# ---------------------------------------------------------------------------
+# Daily weather for central Kolkata from the Open-Meteo Historical Weather API
+# (https://open-meteo.com/en/docs/historical-weather-api), downloaded as CSV with
+# timezone Asia/Kolkata for 2018-04-01 .. 2020-07-01. Only ever READ.
+WEATHER_CSV = PROJECT_ROOT / "data" / "external" / "kolkata_weather_open_meteo.csv"
+WEATHER_TIMEZONE = "Asia/Kolkata"
+
+# Open-Meteo column (unit suffix removed) -> short name used in the code
+WEATHER_COLUMNS = {
+    "temperature_2m_mean": "temp_mean",
+    "temperature_2m_max": "temp_max",
+    "temperature_2m_min": "temp_min",          # cold nights -> inversions trap smog
+    "precipitation_sum": "rain_mm",            # rain washes particles out
+    "precipitation_hours": "rain_hours",
+    "wind_speed_10m_max": "wind_max",          # wind disperses pollution
+    "wind_speed_10m_mean": "wind_mean",
+    "wind_direction_10m_dominant": "wind_dir_deg",
+    "shortwave_radiation_sum": "radiation",
+    "dew_point_2m_mean": "dew_point",
+    "relative_humidity_2m_mean": "humidity",
+    "surface_pressure_mean": "pressure",       # high pressure -> stagnant air
+}
+# Model inputs. Wind direction (an angle) enters as sine and cosine.
+WEATHER_FEATURES = [
+    "temp_mean", "temp_max", "temp_min", "rain_mm", "rain_hours",
+    "wind_max", "wind_mean", "wind_dir_sin", "wind_dir_cos",
+    "radiation", "dew_point", "humidity", "pressure",
+]
+
+# Non-neural models get one flat row per sample: every input "today", AQI on
+# each of the last 7 days, and the 7-day mean of every input.
+TABULAR_RECENT_DAYS = 7
+TABULAR_TARGET_MODES = ["level", "change"]     # same two options as the LSTM
+
+# Candidate settings for each forecaster (the best is chosen on validation)
+RIDGE_ALPHAS = [0.1, 1.0, 10.0, 100.0, 1000.0]
+RF_TREES = 300
+RF_GRID = [{"max_depth": d, "min_samples_leaf": leaf} for d in (4, 8, None) for leaf in (1, 5)]
+XGB_GRID = [{"max_depth": d} for d in (2, 3, 4)]
+XGB_PARAMS = {"n_estimators": 2000, "learning_rate": 0.03, "subsample": 0.8,
+              "colsample_bytree": 0.8, "min_child_weight": 3, "reg_lambda": 1.0}
+XGB_EARLY_STOPPING = 50      # stop adding trees after 50 rounds without validation gain
+# The GRU and LSTM use the same 4 VARIANTS and SEEDS defined above.
+
+COMPARISON_DIR = MODEL_DIR / "comparison"
+COMPARISON_MD = REPORTS_DIR / "model_comparison.md"
+COMPARISON_PREDICTIONS_CSV = REPORTS_DIR / "comparison_test_predictions.csv"

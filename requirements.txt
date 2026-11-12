@@ -6,3 +6,4 @@ scikit-learn==1.9.1
 torch==2.15.0
 jupyter
 tqdm==4.70.1
+xgboost==3.4.1

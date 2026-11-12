@@ -1,0 +1,71 @@
+{
+  "rule": "per forecaster and feature set: lowest mean validation MAE over seeds; test period not used",
+  "selected": [
+    {
+      "feature_set": "pollution",
+      "family": "Linear (ridge)",
+      "candidate": "level, alpha=10.0",
+      "val_MAE_mean": 28.586
+    },
+    {
+      "feature_set": "pollution",
+      "family": "Random forest",
+      "candidate": "level, depth=8, leaf=1",
+      "val_MAE_mean": 25.876
+    },
+    {
+      "feature_set": "pollution",
+      "family": "XGBoost",
+      "candidate": "level, depth=4",
+      "val_MAE_mean": 26.772
+    },
+    {
+      "feature_set": "pollution",
+      "family": "GRU",
+      "candidate": "level_small",
+      "val_MAE_mean": 30.53
+    },
+    {
+      "feature_set": "pollution",
+      "family": "LSTM",
+      "candidate": "change_small",
+      "val_MAE_mean": 31.939
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Linear (ridge)",
+      "candidate": "level, alpha=0.1",
+      "val_MAE_mean": 28.337
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Random forest",
+      "candidate": "level, depth=4, leaf=1",
+      "val_MAE_mean": 27.772
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "XGBoost",
+      "candidate": "level, depth=2",
+      "val_MAE_mean": 27.176
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "GRU",
+      "candidate": "change_small",
+      "val_MAE_mean": 32.32
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "LSTM",
+      "candidate": "change_small",
+      "val_MAE_mean": 31.642
+    }
+  ],
+  "overall_choice_on_validation": {
+    "feature_set": "pollution",
+    "family": "Random forest",
+    "candidate": "level, depth=8, leaf=1"
+  },
+  "decided_at": "2026-11-12T21:29:01"
+}
