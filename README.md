@@ -278,15 +278,13 @@ The tests check the rules that keep the results honest:
 
 ## About
 
-B.Tech Computer Science and Engineering project for **Neural Networks and Deep Learning
-(PCCCS582)**, Institute of Engineering and Management, Kolkata.
+Group project for **Neural Networks and Deep Learning (PCCCS582)**, B.Tech Computer Science and
+Engineering, Institute of Engineering and Management (IEM), Kolkata.
 
-## Author
+## Team
 
-**Debangan Mali**
-[GitHub @DebanganMALI](https://github.com/DebanganMALI) ·
-[LinkedIn](https://www.linkedin.com/in/debanganmali/) ·
-[debanganmali.ai@yahoo.com](mailto:debanganmali.ai@yahoo.com)
-
-Also by the author: [Obscura](https://github.com/DebanganMALI/Obscura) ·
-[Salt-miner](https://github.com/DebanganMALI/Salt-miner)
+| Member | Contribution |
+|---|---|
+| **Debangan Mali** | Extended the project: collected the official 2018-2026 data (CPCB city AQI and 7 stations, Open-Meteo weather, NASA FIRMS fires, festival calendar) and built the extended pipeline; added the model comparison with weather, the advanced networks (attention LSTM, TCN, Transformer, forecast ranges, multi-horizon) and the learning curve; moved training to the GPU; ran all final experiments; wrote the documentation |
+| **Sweta** | Started the project: chose the problem and the Kaggle dataset, wrote the dataset audit, preprocessing and chronological split, the persistence baseline, the first LSTM and its multi-seed experiment design, and the research-rule tests |
+| **Tanisha** | Emotional support (details to be added) |
