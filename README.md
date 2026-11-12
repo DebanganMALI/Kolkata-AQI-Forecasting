@@ -5,8 +5,10 @@ B.Tech 3rd-year Deep Learning project (Neural Network & Deep Learning, PCCCS582)
 Forecasts **tomorrow's Air Quality Index (AQI) for Kolkata** from the previous 14 days of
 air-quality data using a PyTorch **LSTM**, compares it with a **persistence baseline**
 (tomorrow = today), and raises a **high-pollution alert** when predicted AQI > 200.
-A second experiment compares **five forecasters** (ridge regression, random forest, XGBoost,
-GRU, LSTM), each **with and without daily weather data**.
+Further experiments compare **eight forecasters** (ridge regression, random forest, XGBoost, GRU,
+LSTM, attention LSTM, temporal ConvNet, Transformer), with and without weather, fire and festival
+data, first on the Kaggle data (2018-2020) and then on an **extended official dataset (2018-2026)**
+built from CPCB, Open-Meteo and NASA FIRMS.
 
 ## Data
 
@@ -23,6 +25,20 @@ GRU, LSTM), each **with and without daily weather data**.
   Stored unchanged at `data/external/kolkata_weather_open_meteo.csv`. Variables: mean, max and
   min temperature; rainfall total and rain hours; max and mean wind speed; dominant wind
   direction; solar radiation; dew point; humidity; surface pressure.
+- **Extended dataset (2018-10-01 to 2026-10-31)**, `python main.py extended`:
+  - Target: official **CPCB city AQI** for Kolkata (daily 4 PM bulletin), CPCB CCR portal,
+    AQI data repository, city level, `data/raw/cpcb/city_aqi/` (one workbook per year).
+  - Pollutants: the 7 WBPCB stations (Ballygunge, Bidhannagar, Fort William, Jadavpur, Rabindra
+    Bharati University, Rabindra Sarobar, Victoria), CPCB CAAQMS data repository, 24-hour files,
+    `data/raw/cpcb/stations/`; averaged over the stations reporting each day.
+  - Weather: Open-Meteo, same 12 daily variables, 2018-01-01 to 2026-10-31,
+    `data/external/kolkata_weather_2018_2026.csv`. Boundary layer height was left out: Open-Meteo
+    has no values for January to June 2024 (the validation year), and values are never invented.
+  - Fires: NASA FIRMS archive, VIIRS S-NPP, box 82-92 E, 20-28 N, 2018-01-01 to 2026-10-31. The raw
+    detections (123 MB) are kept locally in `data/raw/firms/` and excluded from Git (over GitHub's
+    100 MB limit); the daily summary `data/interim/firms_daily_2018_2026.csv` is committed.
+  - Calendar: day of year, Kali Puja, Durga Puja, Holi, New Year, the 2020 lockdown
+    (`src/config.py`, `V2_EVENT_DATES`), as flags for the forecast day.
 - Full audit: `reports/dataset_audit.md`. Every cleaning decision:
   `reports/preprocessing_decisions.md`. Weather decisions: `reports/model_comparison.md`.
 
@@ -62,7 +78,9 @@ python main.py evaluate            # selected LSTM vs persistence on test -> rep
 python main.py predict             # forecast 2020-07-02 (day after the data ends)
 python main.py predict --date 2020-01-15   # forecast a past day and compare with the real AQI
 python main.py compare             # 5 forecasters x (with / without weather) -> reports/model_comparison.md
-python -m unittest discover -s tests -v    # 26 research-rule checks (no leakage etc.)
+python main.py advanced            # attention LSTM, TCN, Transformer, forecast ranges, 1/3/7 days -> reports/advanced_results.md
+python main.py extended            # 8 forecasters x 3 feature sets on 2018-2026 data -> reports/extended_results.md
+python -m unittest discover -s tests -v    # 39 research-rule checks (no leakage etc.)
 ```
 
 **Device.** The default (`--device auto`) uses the NVIDIA GPU when the CUDA build of PyTorch
@@ -73,7 +91,22 @@ the same numbers on every run; GPU and CPU numbers can differ very slightly. Use
 `--device cpu` to force the CPU. The results in `reports/` were produced on an
 NVIDIA RTX 5070 Ti Laptop GPU (CUDA 13.2).
 
-## Results (test period 2020-01-01 to 2020-07-01, 183 days, scored once)
+## Headline result: extended official data (test 2025-01-01 to 2026-10-31, 669 days)
+
+`reports/extended_results.md`. Train 2018-10 to 2023, validation 2024, test 2025-2026.
+
+- The model **chosen on validation**, a **GRU with pollution + weather inputs**, reached test MAE
+  **11.8** vs persistence **13.8**: difference -2.0 [95% interval -3.2, -0.7], a clear 14% gain.
+- **All 24** forecaster x feature-set combinations beat persistence with intervals entirely below 0.
+  The neural networks (test MAE 11.2 to 12.4) now outperform ridge and the tree models (12.0 to 12.7),
+  the reverse of the small Kaggle dataset.
+- **Learning curve** (chosen model, most recent N years of training data): 1 year 14.9, 2 years 12.0,
+  3 years 11.7, 5 years 11.8. More data helps steeply up to about 3 years, then levels off.
+- Forecasting further ahead: 3 days 19.9 vs 22.2, 7 days 22.4 vs 25.2 (persistence).
+- Weather gave small gains for some networks; adding fires and festivals did not help on validation.
+- The 80% forecast range (quantile attention LSTM) contained the actual AQI on 92% of test days.
+
+## Results on the Kaggle data (test period 2020-01-01 to 2020-07-01, 183 days, scored once)
 
 Main experiment (`reports/results.md`): the selected LSTM (`change_small`, average of 5 seeds)
 reached **MAE 19.8** vs persistence **20.5**. The 95% interval for the difference is
@@ -103,6 +136,10 @@ What this shows, stated honestly:
   only 458 training days, a weather-pollution relationship that changed during lockdown,
   and seasonal information already present in the day-of-year inputs.
 
+Advanced models on the Kaggle data (`reports/advanced_results.md`): the Transformer, ranked best
+on validation among the advanced networks, reached test MAE 18.0 vs persistence 20.5
+(-2.6 [-5.0, -0.4]).
+
 ## Project structure
 
 ```text
@@ -126,8 +163,14 @@ src/train.py                     LSTM training with early stopping
 src/evaluate.py                  MAE / RMSE / MAPE / R2 / bias + alert precision/recall/F1
 src/predict.py                   single-day forecast + alert
 src/compare.py                   5 forecasters x 2 feature sets, chosen on validation
+src/advanced_models.py           attention LSTM, temporal ConvNet, Transformer, pinball loss
+src/advanced.py                  advanced experiment: forecast ranges, attention weights, horizons
+src/extended_data.py             builds the 2018-2026 table (CPCB, stations, weather, fires, calendar)
+src/extended.py                  8 forecasters x 3 feature sets, learning curve, horizons, ranges
 tests/test_pipeline.py           checks for leakage, splits, imputation flags, metrics
 tests/test_comparison.py         checks for the weather data and the comparison
+tests/test_advanced.py           attention, quantile ordering, pinball loss, TCN causality, horizons
+tests/test_extended.py           extended data: target never filled, splits, flags, learning curve
 main.py                          command-line entry point
 ```
 
@@ -157,6 +200,8 @@ main.py                          command-line entry point
 - The test period includes the COVID-19 lockdown (from 2020-03-25).
 - The dataset ends in July 2020, so `predict` is a demonstration on historical data,
   not a live forecast.
+- The extended test years (2025-2026) have cleaner air than most training years, and only two
+  stations were running in 2018, so early city pollutant averages rest on fewer stations.
 - Results come from one chronological split (5 seeds per random model), and a 92-day
   validation period that turned out to be a weak guide to the test period.
 - The weather is reanalysis data (a model-based reconstruction), not readings from a single
