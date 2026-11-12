@@ -12,6 +12,8 @@ Run from the project root (with the .venv activated):
     python main.py predict --date 2020-01-15   # forecast a past date and compare
     python main.py all          # everything above, in order (the full demo)
     python main.py compare      # 5 model families, with and without weather -> reports/model_comparison.md
+    python main.py advanced     # attention LSTM, TCN, Transformer, forecast ranges, 1/3/7 days ahead
+    python main.py extended     # all models on official 2018-2026 data -> reports/extended_results.md
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from src import config  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kolkata next-day AQI forecasting")
     parser.add_argument("command", choices=["audit", "preprocess", "baseline", "train",
-                                            "evaluate", "predict", "all", "compare"])
+                                            "evaluate", "predict", "all", "compare", "advanced", "extended"])
     parser.add_argument("--date", help="for predict: date to forecast (YYYY-MM-DD)")
     parser.add_argument("--device", default=config.DEVICE, choices=["cpu", "cuda", "mps", "auto"],
                         help="auto (default: NVIDIA GPU if available, else CPU), cuda, cpu or mps")
@@ -76,6 +78,16 @@ def main() -> None:
         from src.compare import run_comparison
         print("\n### 7. Model comparison: 5 forecasters, with and without weather")
         run_comparison(device_name=args.device)
+
+    if cmd == "advanced":
+        from src.advanced import run_advanced
+        print("\n### 8. Advanced deep learning: attention, TCN, Transformer, forecast ranges")
+        run_advanced(device_name=args.device)
+
+    if cmd == "extended":
+        from src.extended import run_extended
+        print("\n### 9. Extended data 2018-2026: 8 forecasters x 3 feature sets")
+        run_extended(device_name=args.device)
 
 
 if __name__ == "__main__":

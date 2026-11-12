@@ -47,8 +47,8 @@ class Windows:
 
 
 def make_windows(clean: pd.DataFrame, scaler: StandardScaler,
-                 lookback: int = config.LOOKBACK) -> Windows:
-    """Build every possible sample from a gap-free daily table."""
+                 lookback: int = config.LOOKBACK, horizon: int = config.HORIZON) -> Windows:
+    """Build every possible sample from a gap-free daily table (target = `horizon` days ahead)."""
     clean = clean.sort_values("Date").reset_index(drop=True)
     dates = pd.to_datetime(clean["Date"])
     if (dates.diff().dropna() != pd.Timedelta(days=1)).any():
@@ -57,7 +57,7 @@ def make_windows(clean: pd.DataFrame, scaler: StandardScaler,
     features = scaler.transform(clean)                  # (days, features)
     aqi = clean[config.TARGET].to_numpy(dtype=float)
     split = clean["split"].to_numpy()
-    h = config.HORIZON
+    h = horizon
 
     X, y_true, last, tdates, tsplit = [], [], [], [], []
     for t_last in range(lookback - 1, len(clean) - h):  # t_last = last input day

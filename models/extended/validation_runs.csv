@@ -1,0 +1,283 @@
+feature_set,family,candidate,seed,val_MAE
+pollution,Linear (ridge),"level, alpha=0.1",42,15.292998907740344
+pollution,Linear (ridge),"level, alpha=1.0",42,15.105536449853712
+pollution,Linear (ridge),"level, alpha=10.0",42,14.53047463398613
+pollution,Linear (ridge),"level, alpha=100.0",42,15.033293293353625
+pollution,Linear (ridge),"level, alpha=1000.0",42,16.991944565160647
+pollution,Linear (ridge),"change, alpha=0.1",42,15.291304269325076
+pollution,Linear (ridge),"change, alpha=1.0",42,15.088434077708397
+pollution,Linear (ridge),"change, alpha=10.0",42,14.450072215831606
+pollution,Linear (ridge),"change, alpha=100.0",42,15.04018735585363
+pollution,Linear (ridge),"change, alpha=1000.0",42,16.093906364978697
+pollution,Random forest,"level, depth=4, leaf=1",42,14.549693531559177
+pollution,Random forest,"level, depth=4, leaf=1",43,14.57880029059627
+pollution,Random forest,"level, depth=4, leaf=1",44,14.628615393635078
+pollution,Random forest,"level, depth=4, leaf=5",42,14.502356020115501
+pollution,Random forest,"level, depth=4, leaf=5",43,14.543765188245692
+pollution,Random forest,"level, depth=4, leaf=5",44,14.552168587415247
+pollution,Random forest,"level, depth=8, leaf=1",42,13.98546373047514
+pollution,Random forest,"level, depth=8, leaf=1",43,14.018392226415196
+pollution,Random forest,"level, depth=8, leaf=1",44,13.7879275852007
+pollution,Random forest,"level, depth=8, leaf=5",42,13.745767331709654
+pollution,Random forest,"level, depth=8, leaf=5",43,13.71838256250375
+pollution,Random forest,"level, depth=8, leaf=5",44,13.686117188615393
+pollution,Random forest,"level, depth=12, leaf=1",42,14.018375261632304
+pollution,Random forest,"level, depth=12, leaf=1",43,14.109070186804518
+pollution,Random forest,"level, depth=12, leaf=1",44,13.826598567616902
+pollution,Random forest,"level, depth=12, leaf=5",42,13.708641189267514
+pollution,Random forest,"level, depth=12, leaf=5",43,13.786563216790292
+pollution,Random forest,"level, depth=12, leaf=5",44,13.631565566098994
+pollution,Random forest,"change, depth=4, leaf=1",42,16.067319893256894
+pollution,Random forest,"change, depth=4, leaf=1",43,16.077733328836857
+pollution,Random forest,"change, depth=4, leaf=1",44,16.00584147039682
+pollution,Random forest,"change, depth=4, leaf=5",42,15.927414928267439
+pollution,Random forest,"change, depth=4, leaf=5",43,15.921271474128238
+pollution,Random forest,"change, depth=4, leaf=5",44,15.90287566989967
+pollution,Random forest,"change, depth=8, leaf=1",42,15.503772957380027
+pollution,Random forest,"change, depth=8, leaf=1",43,15.53260672620133
+pollution,Random forest,"change, depth=8, leaf=1",44,15.388090241805067
+pollution,Random forest,"change, depth=8, leaf=5",42,15.395600513836019
+pollution,Random forest,"change, depth=8, leaf=5",43,15.318337381784723
+pollution,Random forest,"change, depth=8, leaf=5",44,15.263196446365308
+pollution,Random forest,"change, depth=12, leaf=1",42,15.053647771077795
+pollution,Random forest,"change, depth=12, leaf=1",43,15.022615084222359
+pollution,Random forest,"change, depth=12, leaf=1",44,14.905949422004465
+pollution,Random forest,"change, depth=12, leaf=5",42,15.021767282187689
+pollution,Random forest,"change, depth=12, leaf=5",43,15.016854040966896
+pollution,Random forest,"change, depth=12, leaf=5",44,14.88902332839854
+pollution,XGBoost,"level, depth=2",42,13.675931202507794
+pollution,XGBoost,"level, depth=2",43,13.614239713967272
+pollution,XGBoost,"level, depth=2",44,13.585831114605222
+pollution,XGBoost,"level, depth=3",42,13.53028165026456
+pollution,XGBoost,"level, depth=3",43,13.533052572395604
+pollution,XGBoost,"level, depth=3",44,13.641342342324029
+pollution,XGBoost,"level, depth=4",42,13.669133755147495
+pollution,XGBoost,"level, depth=4",43,13.39236106497464
+pollution,XGBoost,"level, depth=4",44,13.516071178428874
+pollution,XGBoost,"change, depth=2",42,14.985183782780359
+pollution,XGBoost,"change, depth=2",43,15.220432676739357
+pollution,XGBoost,"change, depth=2",44,15.435914163669633
+pollution,XGBoost,"change, depth=3",42,14.441391063260024
+pollution,XGBoost,"change, depth=3",43,14.511463609443775
+pollution,XGBoost,"change, depth=3",44,14.459291067387989
+pollution,XGBoost,"change, depth=4",42,14.439694911703448
+pollution,XGBoost,"change, depth=4",43,14.589796417606362
+pollution,XGBoost,"change, depth=4",44,14.512857769360966
+pollution,GRU,level_small,42,13.335276638429052
+pollution,GRU,level_small,43,13.07370767543471
+pollution,GRU,level_small,44,13.152818326958249
+pollution,GRU,change_small,42,13.507696697776723
+pollution,GRU,change_small,43,13.86688890698766
+pollution,GRU,change_small,44,13.804195369915902
+pollution,LSTM,level_small,42,13.3243063932471
+pollution,LSTM,level_small,43,12.703391299332957
+pollution,LSTM,level_small,44,12.966622329013987
+pollution,LSTM,change_small,42,13.594319133987389
+pollution,LSTM,change_small,43,14.07291213718517
+pollution,LSTM,change_small,44,14.245427421357919
+pollution,Attention LSTM,"level, 32 units",42,13.280060351161172
+pollution,Attention LSTM,"level, 32 units",43,13.438929959059701
+pollution,Attention LSTM,"level, 32 units",44,13.178341662222278
+pollution,Attention LSTM,"change, 32 units",42,14.234070965640324
+pollution,Attention LSTM,"change, 32 units",43,14.481675031825695
+pollution,Attention LSTM,"change, 32 units",44,14.494624324455014
+pollution,TCN,"level, 32 channels",42,12.88521082528281
+pollution,TCN,"level, 32 channels",43,12.971301826203044
+pollution,TCN,"level, 32 channels",44,13.900988837790722
+pollution,TCN,"change, 32 channels",42,13.37433111937431
+pollution,TCN,"change, 32 channels",43,14.243309072974661
+pollution,TCN,"change, 32 channels",44,13.343941079538121
+pollution,Transformer,"level, d=32, 2 layers",42,13.204268304755622
+pollution,Transformer,"level, d=32, 2 layers",43,12.968457218457768
+pollution,Transformer,"level, d=32, 2 layers",44,12.615340814200058
+pollution,Transformer,"change, d=32, 2 layers",42,13.659733816660582
+pollution,Transformer,"change, d=32, 2 layers",43,13.562261466367787
+pollution,Transformer,"change, d=32, 2 layers",44,14.178131419642789
+pollution+weather,Linear (ridge),"level, alpha=0.1",42,16.27534269036042
+pollution+weather,Linear (ridge),"level, alpha=1.0",42,15.994271143158391
+pollution+weather,Linear (ridge),"level, alpha=10.0",42,15.263305918958556
+pollution+weather,Linear (ridge),"level, alpha=100.0",42,15.131871800830986
+pollution+weather,Linear (ridge),"level, alpha=1000.0",42,16.931952271277734
+pollution+weather,Linear (ridge),"change, alpha=0.1",42,16.273546939557033
+pollution+weather,Linear (ridge),"change, alpha=1.0",42,15.977538881849647
+pollution+weather,Linear (ridge),"change, alpha=10.0",42,15.140382880819567
+pollution+weather,Linear (ridge),"change, alpha=100.0",42,14.920539521259139
+pollution+weather,Linear (ridge),"change, alpha=1000.0",42,15.777933649968057
+pollution+weather,Random forest,"level, depth=4, leaf=1",42,14.297775260893996
+pollution+weather,Random forest,"level, depth=4, leaf=1",43,14.354179630763973
+pollution+weather,Random forest,"level, depth=4, leaf=1",44,14.435795935547901
+pollution+weather,Random forest,"level, depth=4, leaf=5",42,14.214113839386025
+pollution+weather,Random forest,"level, depth=4, leaf=5",43,14.248654752941041
+pollution+weather,Random forest,"level, depth=4, leaf=5",44,14.341858188148768
+pollution+weather,Random forest,"level, depth=8, leaf=1",42,13.389440478985849
+pollution+weather,Random forest,"level, depth=8, leaf=1",43,13.549214449072792
+pollution+weather,Random forest,"level, depth=8, leaf=1",44,13.494231962008131
+pollution+weather,Random forest,"level, depth=8, leaf=5",42,13.11472591195592
+pollution+weather,Random forest,"level, depth=8, leaf=5",43,13.225755870566964
+pollution+weather,Random forest,"level, depth=8, leaf=5",44,13.205326556825824
+pollution+weather,Random forest,"level, depth=12, leaf=1",42,13.430230975858585
+pollution+weather,Random forest,"level, depth=12, leaf=1",43,13.509928092951274
+pollution+weather,Random forest,"level, depth=12, leaf=1",44,13.466138162476469
+pollution+weather,Random forest,"level, depth=12, leaf=5",42,13.060584414681136
+pollution+weather,Random forest,"level, depth=12, leaf=5",43,13.195583847161451
+pollution+weather,Random forest,"level, depth=12, leaf=5",44,13.210995547511843
+pollution+weather,Random forest,"change, depth=4, leaf=1",42,16.076259363779
+pollution+weather,Random forest,"change, depth=4, leaf=1",43,16.01278613687101
+pollution+weather,Random forest,"change, depth=4, leaf=1",44,16.058784972718033
+pollution+weather,Random forest,"change, depth=4, leaf=5",42,16.04749402996276
+pollution+weather,Random forest,"change, depth=4, leaf=5",43,15.984379574264587
+pollution+weather,Random forest,"change, depth=4, leaf=5",44,15.98682014975537
+pollution+weather,Random forest,"change, depth=8, leaf=1",42,15.580086384596
+pollution+weather,Random forest,"change, depth=8, leaf=1",43,15.573404266883175
+pollution+weather,Random forest,"change, depth=8, leaf=1",44,15.661756656483359
+pollution+weather,Random forest,"change, depth=8, leaf=5",42,15.635023929603024
+pollution+weather,Random forest,"change, depth=8, leaf=5",43,15.566758954236372
+pollution+weather,Random forest,"change, depth=8, leaf=5",44,15.665398215641694
+pollution+weather,Random forest,"change, depth=12, leaf=1",42,15.379997644469807
+pollution+weather,Random forest,"change, depth=12, leaf=1",43,15.410231230804044
+pollution+weather,Random forest,"change, depth=12, leaf=1",44,15.509236082019433
+pollution+weather,Random forest,"change, depth=12, leaf=5",42,15.409653522762829
+pollution+weather,Random forest,"change, depth=12, leaf=5",43,15.334485387947336
+pollution+weather,Random forest,"change, depth=12, leaf=5",44,15.571961247517397
+pollution+weather,XGBoost,"level, depth=2",42,13.204209327466348
+pollution+weather,XGBoost,"level, depth=2",43,13.251992761604239
+pollution+weather,XGBoost,"level, depth=2",44,13.181085207177857
+pollution+weather,XGBoost,"level, depth=3",42,12.881458629783639
+pollution+weather,XGBoost,"level, depth=3",43,12.882508765300434
+pollution+weather,XGBoost,"level, depth=3",44,13.007984664676412
+pollution+weather,XGBoost,"level, depth=4",42,13.267802064402387
+pollution+weather,XGBoost,"level, depth=4",43,12.942886663256727
+pollution+weather,XGBoost,"level, depth=4",44,13.454230692376905
+pollution+weather,XGBoost,"change, depth=2",42,14.015155212412258
+pollution+weather,XGBoost,"change, depth=2",43,14.630763689135724
+pollution+weather,XGBoost,"change, depth=2",44,14.103226230420207
+pollution+weather,XGBoost,"change, depth=3",42,13.582437087728689
+pollution+weather,XGBoost,"change, depth=3",43,14.027670049169975
+pollution+weather,XGBoost,"change, depth=3",44,13.612750092078647
+pollution+weather,XGBoost,"change, depth=4",42,13.49601493036936
+pollution+weather,XGBoost,"change, depth=4",43,13.955314647530846
+pollution+weather,XGBoost,"change, depth=4",44,13.909335246885776
+pollution+weather,GRU,level_small,42,12.95345910340152
+pollution+weather,GRU,level_small,43,12.96326330318098
+pollution+weather,GRU,level_small,44,12.71317748778889
+pollution+weather,GRU,change_small,42,14.319257860422942
+pollution+weather,GRU,change_small,43,14.266739869278155
+pollution+weather,GRU,change_small,44,14.131454163046676
+pollution+weather,LSTM,level_small,42,13.152244777174984
+pollution+weather,LSTM,level_small,43,12.800017408434169
+pollution+weather,LSTM,level_small,44,13.063784717719505
+pollution+weather,LSTM,change_small,42,14.912908175321256
+pollution+weather,LSTM,change_small,43,15.326182483619768
+pollution+weather,LSTM,change_small,44,14.253540485079574
+pollution+weather,Attention LSTM,"level, 32 units",42,13.626697798051392
+pollution+weather,Attention LSTM,"level, 32 units",43,13.50153682159641
+pollution+weather,Attention LSTM,"level, 32 units",44,14.26452607994134
+pollution+weather,Attention LSTM,"change, 32 units",42,14.509641066152549
+pollution+weather,Attention LSTM,"change, 32 units",43,15.444502259653204
+pollution+weather,Attention LSTM,"change, 32 units",44,14.796991529478461
+pollution+weather,TCN,"level, 32 channels",42,13.565889289961595
+pollution+weather,TCN,"level, 32 channels",43,13.748328274245683
+pollution+weather,TCN,"level, 32 channels",44,13.904970686104388
+pollution+weather,TCN,"change, 32 channels",42,14.566414448405832
+pollution+weather,TCN,"change, 32 channels",43,14.547751657995041
+pollution+weather,TCN,"change, 32 channels",44,15.148228010038235
+pollution+weather,Transformer,"level, d=32, 2 layers",42,13.422353115656835
+pollution+weather,Transformer,"level, d=32, 2 layers",43,13.290193761256644
+pollution+weather,Transformer,"level, d=32, 2 layers",44,14.125342832297733
+pollution+weather,Transformer,"change, d=32, 2 layers",42,13.489124541667472
+pollution+weather,Transformer,"change, d=32, 2 layers",43,14.223035215607062
+pollution+weather,Transformer,"change, d=32, 2 layers",44,14.330367487494767
+all,Linear (ridge),"level, alpha=0.1",42,16.659853077735146
+all,Linear (ridge),"level, alpha=1.0",42,16.347008627724083
+all,Linear (ridge),"level, alpha=10.0",42,15.426425608139628
+all,Linear (ridge),"level, alpha=100.0",42,15.306774615402235
+all,Linear (ridge),"level, alpha=1000.0",42,17.14495197768108
+all,Linear (ridge),"change, alpha=0.1",42,16.65810637730538
+all,Linear (ridge),"change, alpha=1.0",42,16.328940482729806
+all,Linear (ridge),"change, alpha=10.0",42,15.307253751322243
+all,Linear (ridge),"change, alpha=100.0",42,15.097362595180368
+all,Linear (ridge),"change, alpha=1000.0",42,15.754462023804068
+all,Random forest,"level, depth=4, leaf=1",42,14.268228997298257
+all,Random forest,"level, depth=4, leaf=1",43,14.328948140142256
+all,Random forest,"level, depth=4, leaf=1",44,14.422983054281882
+all,Random forest,"level, depth=4, leaf=5",42,14.182441180998655
+all,Random forest,"level, depth=4, leaf=5",43,14.231837747442372
+all,Random forest,"level, depth=4, leaf=5",44,14.32751000730126
+all,Random forest,"level, depth=8, leaf=1",42,13.390069121772292
+all,Random forest,"level, depth=8, leaf=1",43,13.610178355287092
+all,Random forest,"level, depth=8, leaf=1",44,13.476557272377434
+all,Random forest,"level, depth=8, leaf=5",42,13.114726819572775
+all,Random forest,"level, depth=8, leaf=5",43,13.305402860711048
+all,Random forest,"level, depth=8, leaf=5",44,13.193211450195962
+all,Random forest,"level, depth=12, leaf=1",42,13.421395521159935
+all,Random forest,"level, depth=12, leaf=1",43,13.613844451516378
+all,Random forest,"level, depth=12, leaf=1",44,13.480348924748935
+all,Random forest,"level, depth=12, leaf=5",42,13.09627954490965
+all,Random forest,"level, depth=12, leaf=5",43,13.273140113814065
+all,Random forest,"level, depth=12, leaf=5",44,13.186409668858245
+all,Random forest,"change, depth=4, leaf=1",42,16.127742783917864
+all,Random forest,"change, depth=4, leaf=1",43,16.037265638668078
+all,Random forest,"change, depth=4, leaf=1",44,16.096861410526945
+all,Random forest,"change, depth=4, leaf=5",42,16.07847950303881
+all,Random forest,"change, depth=4, leaf=5",43,16.021692770795884
+all,Random forest,"change, depth=4, leaf=5",44,16.041358146401564
+all,Random forest,"change, depth=8, leaf=1",42,15.645819349647553
+all,Random forest,"change, depth=8, leaf=1",43,15.567141265182379
+all,Random forest,"change, depth=8, leaf=1",44,15.743736021293921
+all,Random forest,"change, depth=8, leaf=5",42,15.68626210667012
+all,Random forest,"change, depth=8, leaf=5",43,15.598850912400499
+all,Random forest,"change, depth=8, leaf=5",44,15.734209310923736
+all,Random forest,"change, depth=12, leaf=1",42,15.415305148079918
+all,Random forest,"change, depth=12, leaf=1",43,15.349463239343473
+all,Random forest,"change, depth=12, leaf=1",44,15.600962713784005
+all,Random forest,"change, depth=12, leaf=5",42,15.415153720472627
+all,Random forest,"change, depth=12, leaf=5",43,15.367411976914223
+all,Random forest,"change, depth=12, leaf=5",44,15.615362209225571
+all,XGBoost,"level, depth=2",42,12.960214429759311
+all,XGBoost,"level, depth=2",43,13.131109821240978
+all,XGBoost,"level, depth=2",44,13.11625211706147
+all,XGBoost,"level, depth=3",42,12.891738407045478
+all,XGBoost,"level, depth=3",43,12.984309457434467
+all,XGBoost,"level, depth=3",44,13.200554746345965
+all,XGBoost,"level, depth=4",42,13.458843678165628
+all,XGBoost,"level, depth=4",43,13.064247305098881
+all,XGBoost,"level, depth=4",44,13.743918342083385
+all,XGBoost,"change, depth=2",42,14.135876083316301
+all,XGBoost,"change, depth=2",43,13.888093773781083
+all,XGBoost,"change, depth=2",44,13.908684416369383
+all,XGBoost,"change, depth=3",42,13.535118943236814
+all,XGBoost,"change, depth=3",43,14.194673293169124
+all,XGBoost,"change, depth=3",44,13.974492469385622
+all,XGBoost,"change, depth=4",42,13.89156758845261
+all,XGBoost,"change, depth=4",43,13.915113344457545
+all,XGBoost,"change, depth=4",44,13.758502423048954
+all,GRU,level_small,42,14.187824718504839
+all,GRU,level_small,43,13.924355643350973
+all,GRU,level_small,44,13.31348784947699
+all,GRU,change_small,42,14.670641595119537
+all,GRU,change_small,43,14.995183535980132
+all,GRU,change_small,44,14.749491369644215
+all,LSTM,level_small,42,14.200866562058142
+all,LSTM,level_small,43,13.42390197193506
+all,LSTM,level_small,44,14.237147496043585
+all,LSTM,change_small,42,15.717728751146456
+all,LSTM,change_small,43,15.382334644301816
+all,LSTM,change_small,44,15.879889461910512
+all,Attention LSTM,"level, 32 units",42,14.224683586748942
+all,Attention LSTM,"level, 32 units",43,13.973622635200135
+all,Attention LSTM,"level, 32 units",44,13.70107916980048
+all,Attention LSTM,"change, 32 units",42,15.533581675744776
+all,Attention LSTM,"change, 32 units",43,15.000176456111777
+all,Attention LSTM,"change, 32 units",44,14.968872261736037
+all,TCN,"level, 32 channels",42,13.9718620029448
+all,TCN,"level, 32 channels",43,13.963873702651604
+all,TCN,"level, 32 channels",44,13.655190011007301
+all,TCN,"change, 32 channels",42,14.767470786596109
+all,TCN,"change, 32 channels",43,14.433331706487827
+all,TCN,"change, 32 channels",44,14.682716390030544
+all,Transformer,"level, d=32, 2 layers",42,14.176377639432191
+all,Transformer,"level, d=32, 2 layers",43,15.184919558842084
+all,Transformer,"level, d=32, 2 layers",44,13.728005440872337
+all,Transformer,"change, d=32, 2 layers",42,14.995392872259645
+all,Transformer,"change, d=32, 2 layers",43,14.190895047755056
+all,Transformer,"change, d=32, 2 layers",44,13.888540698776742

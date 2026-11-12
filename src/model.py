@@ -94,6 +94,11 @@ def _make_gpu_deterministic() -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms(True, warn_only=True)
+    # The Transformer's fast attention kernels are not repeatable on the GPU;
+    # the plain ("math") kernel is, so only that one is allowed.
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_math_sdp(True)
 
 
 def load_checkpoint(path, device: str = "cpu"):

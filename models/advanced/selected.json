@@ -1,0 +1,30 @@
+{
+  "rule": "lowest mean validation score over seeds (MAE; pinball for quantiles); test period not used",
+  "selected": {
+    "Attention LSTM": {
+      "candidate": "change, 32 units",
+      "metric": "val_MAE",
+      "mean": 31.259363976980275,
+      "sd": 0.9483735474618519
+    },
+    "TCN": {
+      "candidate": "level, 32 channels",
+      "metric": "val_MAE",
+      "mean": 30.73396199972881,
+      "sd": 1.1058097541383813
+    },
+    "Transformer": {
+      "candidate": "change, d=32, 2 layers",
+      "metric": "val_MAE",
+      "mean": 29.253186450760772,
+      "sd": 1.158830724130066
+    },
+    "Quantile attention LSTM": {
+      "candidate": "level, 32 units",
+      "metric": "val_pinball",
+      "mean": 10.762912552173862,
+      "sd": 1.913230085746181
+    }
+  },
+  "decided_at": "2026-11-12T22:35:29"
+}

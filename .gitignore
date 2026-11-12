@@ -4,3 +4,9 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 venv/
+
+# NASA FIRMS raw detections (123 MB, over GitHub's 100 MB limit); the daily summary in data/interim/ is committed instead
+data/raw/firms/
+# live progress logs written during runs
+models/*/progress.log
+logs/

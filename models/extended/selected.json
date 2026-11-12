@@ -1,0 +1,183 @@
+{
+  "rule": "lowest mean validation MAE over seeds; test period not used",
+  "per_feature_set_and_model": [
+    {
+      "feature_set": "pollution",
+      "family": "Linear (ridge)",
+      "candidate": "change, alpha=10.0",
+      "mean": 14.45,
+      "std": NaN
+    },
+    {
+      "feature_set": "pollution",
+      "family": "Random forest",
+      "candidate": "level, depth=12, leaf=5",
+      "mean": 13.709,
+      "std": 0.077
+    },
+    {
+      "feature_set": "pollution",
+      "family": "XGBoost",
+      "candidate": "level, depth=4",
+      "mean": 13.526,
+      "std": 0.139
+    },
+    {
+      "feature_set": "pollution",
+      "family": "GRU",
+      "candidate": "level_small",
+      "mean": 13.187,
+      "std": 0.134
+    },
+    {
+      "feature_set": "pollution",
+      "family": "LSTM",
+      "candidate": "level_small",
+      "mean": 12.998,
+      "std": 0.312
+    },
+    {
+      "feature_set": "pollution",
+      "family": "Attention LSTM",
+      "candidate": "level, 32 units",
+      "mean": 13.299,
+      "std": 0.131
+    },
+    {
+      "feature_set": "pollution",
+      "family": "TCN",
+      "candidate": "level, 32 channels",
+      "mean": 13.253,
+      "std": 0.563
+    },
+    {
+      "feature_set": "pollution",
+      "family": "Transformer",
+      "candidate": "level, d=32, 2 layers",
+      "mean": 12.929,
+      "std": 0.296
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Linear (ridge)",
+      "candidate": "change, alpha=100.0",
+      "mean": 14.921,
+      "std": NaN
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Random forest",
+      "candidate": "level, depth=12, leaf=5",
+      "mean": 13.156,
+      "std": 0.083
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "XGBoost",
+      "candidate": "level, depth=3",
+      "mean": 12.924,
+      "std": 0.073
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "GRU",
+      "candidate": "level_small",
+      "mean": 12.877,
+      "std": 0.142
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "LSTM",
+      "candidate": "level_small",
+      "mean": 13.005,
+      "std": 0.183
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Attention LSTM",
+      "candidate": "level, 32 units",
+      "mean": 13.798,
+      "std": 0.409
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "TCN",
+      "candidate": "level, 32 channels",
+      "mean": 13.74,
+      "std": 0.17
+    },
+    {
+      "feature_set": "pollution+weather",
+      "family": "Transformer",
+      "candidate": "level, d=32, 2 layers",
+      "mean": 13.613,
+      "std": 0.449
+    },
+    {
+      "feature_set": "all",
+      "family": "Linear (ridge)",
+      "candidate": "change, alpha=100.0",
+      "mean": 15.097,
+      "std": NaN
+    },
+    {
+      "feature_set": "all",
+      "family": "Random forest",
+      "candidate": "level, depth=12, leaf=5",
+      "mean": 13.185,
+      "std": 0.088
+    },
+    {
+      "feature_set": "all",
+      "family": "XGBoost",
+      "candidate": "level, depth=3",
+      "mean": 13.026,
+      "std": 0.158
+    },
+    {
+      "feature_set": "all",
+      "family": "GRU",
+      "candidate": "level_small",
+      "mean": 13.809,
+      "std": 0.449
+    },
+    {
+      "feature_set": "all",
+      "family": "LSTM",
+      "candidate": "level_small",
+      "mean": 13.954,
+      "std": 0.459
+    },
+    {
+      "feature_set": "all",
+      "family": "Attention LSTM",
+      "candidate": "level, 32 units",
+      "mean": 13.966,
+      "std": 0.262
+    },
+    {
+      "feature_set": "all",
+      "family": "TCN",
+      "candidate": "level, 32 channels",
+      "mean": 13.864,
+      "std": 0.181
+    },
+    {
+      "feature_set": "all",
+      "family": "Transformer",
+      "candidate": "change, d=32, 2 layers",
+      "mean": 14.358,
+      "std": 0.572
+    }
+  ],
+  "overall": {
+    "feature_set": "pollution+weather",
+    "family": "GRU",
+    "candidate": "level_small"
+  },
+  "quantile_model": {
+    "feature_set": "pollution",
+    "candidate": "level, 32 units"
+  },
+  "decided_at": "2026-11-13T00:36:06"
+}

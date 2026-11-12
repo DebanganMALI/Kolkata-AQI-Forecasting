@@ -53,8 +53,11 @@ def load_weather(path: Path = config.WEATHER_CSV) -> pd.DataFrame:
             "daily values line up with the AQI dates."
         )
 
-    header = next(i for i, line in enumerate(lines) if line.startswith("time,"))
-    df = pd.read_csv(StringIO("\n".join(lines[header:])))
+    # the daily table (a file may also hold an hourly block above it)
+    header = next(i for i, line in enumerate(lines)
+                  if line.startswith("time,") and "temperature_2m_mean" in line)
+    end = next((i for i in range(header + 1, len(lines)) if not lines[i].strip()), len(lines))
+    df = pd.read_csv(StringIO("\n".join(lines[header:end])))
     df.columns = [c.split(" (")[0] for c in df.columns]   # drop the unit suffix
 
     # Duplicate wind-direction column: keep one, but only if they really agree.

@@ -1,0 +1,41 @@
+model,candidate,seed,val_MAE,val_pinball
+Attention LSTM,"level, 32 units",42,38.71118855414424,
+Attention LSTM,"level, 32 units",43,39.33577976466112,
+Attention LSTM,"level, 32 units",44,33.78471512589827,
+Attention LSTM,"level, 32 units",45,36.19564252688043,
+Attention LSTM,"level, 32 units",46,32.71560922279776,
+Attention LSTM,"change, 32 units",42,32.27623648099093,
+Attention LSTM,"change, 32 units",43,32.29898683592146,
+Attention LSTM,"change, 32 units",44,30.383387180663235,
+Attention LSTM,"change, 32 units",45,30.572521120823325,
+Attention LSTM,"change, 32 units",46,30.76568826650239,
+TCN,"level, 32 channels",42,32.53868196451888,
+TCN,"level, 32 channels",43,29.57361009301379,
+TCN,"level, 32 channels",44,30.505960180944413,
+TCN,"level, 32 channels",45,30.79887675510431,
+TCN,"level, 32 channels",46,30.252681005062655,
+TCN,"change, 32 channels",42,30.829971349486677,
+TCN,"change, 32 channels",43,30.184066770161596,
+TCN,"change, 32 channels",44,31.76298160872418,
+TCN,"change, 32 channels",45,30.009146849510202,
+TCN,"change, 32 channels",46,30.995696086280862,
+Transformer,"level, d=32, 2 layers",42,27.628960081517057,
+Transformer,"level, d=32, 2 layers",43,31.78989702347101,
+Transformer,"level, d=32, 2 layers",44,33.56074235044358,
+Transformer,"level, d=32, 2 layers",45,33.14101467770954,
+Transformer,"level, d=32, 2 layers",46,35.000466325506416,
+Transformer,"change, d=32, 2 layers",42,29.794135246920227,
+Transformer,"change, d=32, 2 layers",43,28.923153609925308,
+Transformer,"change, d=32, 2 layers",44,30.76140470381161,
+Transformer,"change, d=32, 2 layers",45,29.173867320174367,
+Transformer,"change, d=32, 2 layers",46,27.61337137297235,
+Quantile attention LSTM,"level, 32 units",42,34.73719863669509,10.76242018318378
+Quantile attention LSTM,"level, 32 units",43,36.03888565256875,10.81500706751049
+Quantile attention LSTM,"level, 32 units",44,27.486070881494424,8.782349187620536
+Quantile attention LSTM,"level, 32 units",45,43.27506425509644,13.831675275369646
+Quantile attention LSTM,"level, 32 units",46,31.462052860001602,9.623111047184864
+Quantile attention LSTM,"change, 32 units",42,32.16923414952214,11.306579426685234
+Quantile attention LSTM,"change, 32 units",43,32.08320894381013,11.642571213975458
+Quantile attention LSTM,"change, 32 units",44,30.59205511935506,11.028905404979149
+Quantile attention LSTM,"change, 32 units",45,32.15177520473117,11.956055426907474
+Quantile attention LSTM,"change, 32 units",46,31.532025207586432,11.500370932928739

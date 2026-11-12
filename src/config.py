@@ -183,3 +183,73 @@ XGB_EARLY_STOPPING = 50      # stop adding trees after 50 rounds without validat
 COMPARISON_DIR = MODEL_DIR / "comparison"
 COMPARISON_MD = REPORTS_DIR / "model_comparison.md"
 COMPARISON_PREDICTIONS_CSV = REPORTS_DIR / "comparison_test_predictions.csv"
+
+# ---------------------------------------------------------------------------
+# Advanced deep-learning experiment  (python main.py advanced)
+# Fixed BEFORE the experiment was run. See src/advanced.py.
+# ---------------------------------------------------------------------------
+QUANTILES = (0.1, 0.5, 0.9)      # forecast range = 10th to 90th percentile (an 80% range)
+HORIZONS = [1, 3, 7]             # days ahead for the multi-horizon check
+ADVANCED_CANDIDATES = {
+    "Attention LSTM": [{"name": f"{m}, 32 units", "target_mode": m, "hidden_size": 32}
+                       for m in ("level", "change")],
+    "TCN": [{"name": f"{m}, 32 channels", "target_mode": m, "channels": 32}
+            for m in ("level", "change")],
+    "Transformer": [{"name": f"{m}, d=32, 2 layers", "target_mode": m, "d_model": 32, "num_layers": 2}
+                    for m in ("level", "change")],
+    "Quantile attention LSTM": [{"name": f"{m}, 32 units", "target_mode": m, "hidden_size": 32}
+                                for m in ("level", "change")],
+}
+ADVANCED_DIR = MODEL_DIR / "advanced"
+ADVANCED_MD = REPORTS_DIR / "advanced_results.md"
+ADVANCED_PREDICTIONS_CSV = REPORTS_DIR / "advanced_test_predictions.csv"
+
+# ---------------------------------------------------------------------------
+# Extended dataset, 2018-2026  (python main.py extended)
+# Fixed BEFORE the extended experiment was run. See src/extended_data.py and
+# src/extended.py.
+# ---------------------------------------------------------------------------
+V2_CITY_AQI_XLSX_DIR = PROJECT_ROOT / "data" / "raw" / "cpcb" / "city_aqi"
+V2_CITY_AQI_CSV = PROJECT_ROOT / "data" / "interim" / "cpcb_kolkata_city_aqi_daily.csv"
+V2_STATIONS_DIR = PROJECT_ROOT / "data" / "raw" / "cpcb" / "stations"
+V2_WEATHER_CSV = PROJECT_ROOT / "data" / "external" / "kolkata_weather_2018_2026.csv"
+V2_FIRES_CSV = PROJECT_ROOT / "data" / "interim" / "firms_daily_2018_2026.csv"
+V2_TABLE_CSV = PROJECT_ROOT / "data" / "processed" / "kolkata_extended_daily.csv"
+
+# Official city AQI is near-continuous from 2018-09-26; start on the next full month.
+V2_START, V2_END = "2018-10-01", "2026-10-31"
+V2_TRAIN_END = "2023-12-31"      # train:      2018-10-01 .. 2023-12-31
+V2_VAL_END = "2024-12-31"        # validation: all of 2024 (every season)
+                                 # test:       2025-01-01 .. 2026-10-31
+V2_FFILL_LIMIT = 7               # longest input gap carried forward; longer = error
+V2_SEEDS = [42, 43, 44]          # 3 seeds per random model (4x more data than before)
+
+V2_FIRE_FEATURES = ["log_fires_300km", "log_frp_region"]
+# Festival dates entered from public Indian holiday calendars (verify before citing).
+V2_EVENT_DATES = {
+    "kali_puja": ["2018-11-06", "2019-10-27", "2020-11-14", "2021-11-04", "2022-10-24",
+                  "2023-11-12", "2024-10-31", "2025-10-20"],
+    "durga_puja": ["2018-10-19", "2019-10-08", "2020-10-26", "2021-10-15", "2022-10-05",
+                   "2023-10-24", "2024-10-12", "2025-10-02", "2026-10-20"],   # Vijaya Dashami
+    "holi": ["2019-03-21", "2020-03-10", "2021-03-29", "2022-03-18", "2023-03-08",
+             "2024-03-25", "2025-03-14", "2026-03-04"],
+    "new_year": [f"{y}-01-01" for y in range(2019, 2027)],
+}
+# (days before, days after) each date that count as the event
+V2_EVENT_WINDOWS = {"kali_puja": (1, 2), "durga_puja": (3, 0), "holi": (0, 0), "new_year": (1, 0)}
+V2_LOCKDOWN = ("2020-03-25", "2020-05-31")   # national lockdown, phases 1-4
+V2_EVENT_FEATURES = [f"{k}_next" for k in V2_EVENT_WINDOWS] + ["lockdown_next"]
+
+V2_FEATURE_SETS = {
+    "pollution": [],
+    "pollution+weather": list(WEATHER_FEATURES),
+    "all": list(WEATHER_FEATURES) + V2_FIRE_FEATURES + V2_EVENT_FEATURES,
+}
+V2_RNN_CANDIDATES = [   # GRU and LSTM; the 2 smaller variants (more seeds cost more here)
+    {"name": "level_small", "target_mode": "level", "hidden_size": 32, "num_layers": 1},
+    {"name": "change_small", "target_mode": "change", "hidden_size": 32, "num_layers": 1},
+]
+V2_LEARNING_YEARS = [1, 2, 3, 5]     # learning curve: train on the last N years only
+V2_DIR = MODEL_DIR / "extended"
+V2_MD = REPORTS_DIR / "extended_results.md"
+V2_PREDICTIONS_CSV = REPORTS_DIR / "extended_test_predictions.csv"
