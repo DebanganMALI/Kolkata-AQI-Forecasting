@@ -8,7 +8,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.13%2B-3776ab.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.15%20%7C%20CUDA%2013.2-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-39%20passing-2ea44f.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-43%20passing-2ea44f.svg)](tests)
 [![Data](https://img.shields.io/badge/data-CPCB%20%C2%B7%20Open--Meteo%20%C2%B7%20NASA%20FIRMS-6e6e6e.svg)](#data)
 [![Course](https://img.shields.io/badge/course-PCCCS582%20Neural%20Networks%20%26%20Deep%20Learning-6e6e6e.svg)](#about)
 
@@ -54,6 +54,26 @@ It was built in two stages:
 - Forecasting further ahead: **3 days** 19.9 vs 22.2, **7 days** 22.4 vs 25.2 for persistence.
 - The **80% forecast range** contained the real AQI on **92%** of test days.
 
+**Does it hold up in other years? Yes.** The whole procedure was repeated in four walk-forward
+rounds, each trained only on earlier data:
+
+| Test period | Persistence | GRU | Ensemble (GRU + LSTM + Transformer + XGBoost) |
+|---|---|---|---|
+| 2022 | 18.6 | **14.6** | **14.2** |
+| 2023 | 19.5 | **15.1** | **14.9** |
+| 2024 | 17.0 | **13.4** | **13.1** |
+| 2025 to 2026 | 13.8 | **11.8** | **10.9** |
+| **All 1,764 days** | | **-3.2 [-4.0, -2.4]** | **-3.8 [-4.5, -3.0]** |
+
+Both beat persistence with 95% confidence in **every** round; the last row is the pooled
+difference in test MAE. The ensemble was the most accurate model in all four.
+
+<div align="center">
+
+<img src="reports/figures/robust_walk_forward.png" alt="Walk-forward test error by year" width="720">
+
+</div>
+
 <div align="center">
 
 <img src="reports/figures/extended_test_mae.png" alt="Test error by model and inputs" width="720">
@@ -79,9 +99,12 @@ Full tables: [`reports/extended_results.md`](reports/extended_results.md).
 - **1, 3 and 7 days ahead**, and a **learning curve** that measures the value of more data.
 - **Honest evaluation**: chronological split, no data leakage, choices made on validation only,
   test scored once, 95% block-bootstrap intervals for every comparison.
+- **Walk-forward testing** over four separate years (2022, 2023, 2024, 2025-2026), plus a
+  pre-declared **ensemble**, a **spike-weighted** GRU for polluted days, and a calibrated
+  **probability of a high-pollution day**.
 - **Runs on an NVIDIA GPU** in deterministic mode, so the same machine gives the same numbers
   every run; falls back to CPU automatically.
-- **39 automated checks** for the research rules: no future data in any input, the target never
+- **43 automated checks** for the research rules: no future data in any input, the target never
   filled in, train-only scaling, causal convolutions, and more.
 
 ---
@@ -147,7 +170,7 @@ results and limitations take into account.
 
 ## Experiments
 
-The project grew in four experiments. Each has one command and writes its own report.
+The project grew in five experiments. Each has one command and writes its own report.
 
 | # | Experiment | Command | Report | Headline |
 |---|---|---|---|---|
@@ -155,6 +178,7 @@ The project grew in four experiments. Each has one command and writes its own re
 | 2 | 5 forecasters, with and without weather (Kaggle) | `python main.py compare` | [`model_comparison.md`](reports/model_comparison.md) | Ridge best on test; weather did not help |
 | 3 | Attention LSTM, TCN, Transformer, forecast ranges (Kaggle) | `python main.py advanced` | [`advanced_results.md`](reports/advanced_results.md) | Transformer 18.0 vs 20.5, significant |
 | 4 | **8 forecasters x 3 input sets on official 2018-2026 data** | `python main.py extended` | [`extended_results.md`](reports/extended_results.md) | **GRU 11.8 vs 13.8, significant** |
+| 5 | **Walk-forward over 4 test years, ensemble, spike weighting, alert probability** | `python main.py robust` | [`robust_results.md`](reports/robust_results.md) | **GRU and ensemble win all 4 years** |
 
 <div align="center">
 
@@ -196,9 +220,10 @@ refuses to activate the environment, run
 ## Usage
 
 ```powershell
-python -m unittest discover -s tests -v    # 39 research-rule checks
+python -m unittest discover -s tests -v    # 43 research-rule checks
 
 python main.py extended                    # headline experiment, about 35 min on an RTX 5070 Ti
+python main.py robust                      # walk-forward over 4 test years, about 13 min (run after extended)
 
 python main.py all                         # Kaggle pipeline: audit -> preprocess -> baseline -> train -> evaluate -> predict
 python main.py compare                     # 5 forecasters, with and without weather
@@ -243,9 +268,10 @@ src/
   compare.py           5-forecaster comparison with weather
   advanced.py          forecast ranges, attention weights, horizons
   extended.py          8 forecasters x 3 input sets, learning curve
+  robust.py            walk-forward rounds, ensemble, spike-weighted GRU, alert probability
   weather.py           Open-Meteo reader
   predict.py           single-day forecast and alert
-tests/                 39 checks for the research rules
+tests/                 43 checks for the research rules
 main.py                command-line entry point
 ```
 
@@ -268,7 +294,10 @@ The tests check the rules that keep the results honest:
 
 ## Limitations
 
-- One chronological split. Results may differ for other periods.
+- Model settings were chosen once, on 2024, and reused in every walk-forward round; round 3 tests
+  2024 itself, and round 4 re-scores the 2025-2026 period already reported.
+- Weighting polluted days more (spike-weighted GRU) slightly reduced errors on the worst 20% of
+  days but raised the overall error: a trade-off, not an overall improvement.
 - The extended test years (2025-2026) have cleaner air than most training years.
 - Only two stations reported in 2018, so the earliest city pollutant averages rest on fewer readings.
 - Weather is reanalysis and fires are satellite detections: they show associations, not causes.
