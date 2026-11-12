@@ -253,3 +253,20 @@ V2_LEARNING_YEARS = [1, 2, 3, 5]     # learning curve: train on the last N years
 V2_DIR = MODEL_DIR / "extended"
 V2_MD = REPORTS_DIR / "extended_results.md"
 V2_PREDICTIONS_CSV = REPORTS_DIR / "extended_test_predictions.csv"
+
+# ---------------------------------------------------------------------------
+# Robustness and spike experiment  (python main.py robust)
+# Fixed BEFORE the experiment was run. See src/robust.py.
+# ---------------------------------------------------------------------------
+ROBUST_FOLDS = [   # walk-forward rounds: train -> validation year -> test period
+    {"name": "2022", "train_end": "2020-12-31", "val_end": "2021-12-31", "test_end": "2022-12-31"},
+    {"name": "2023", "train_end": "2021-12-31", "val_end": "2022-12-31", "test_end": "2023-12-31"},
+    {"name": "2024", "train_end": "2022-12-31", "val_end": "2023-12-31", "test_end": "2024-12-31"},
+    {"name": "2025-2026", "train_end": "2023-12-31", "val_end": "2024-12-31", "test_end": "2026-10-31"},
+]
+SPIKE_GAMMAS = [1.0, 2.0]          # weight = (AQI / mean AQI) ** gamma
+SPIKE_TOP_SHARE = 0.2              # "high days" = most polluted 20% of a period
+ENSEMBLE_FAMILIES = ["GRU", "LSTM", "Transformer", "XGBoost"]
+ROBUST_DIR = MODEL_DIR / "robust"
+ROBUST_MD = REPORTS_DIR / "robust_results.md"
+ROBUST_PREDICTIONS_CSV = REPORTS_DIR / "robust_test_predictions.csv"

@@ -14,6 +14,7 @@ Run from the project root (with the .venv activated):
     python main.py compare      # 5 model families, with and without weather -> reports/model_comparison.md
     python main.py advanced     # attention LSTM, TCN, Transformer, forecast ranges, 1/3/7 days ahead
     python main.py extended     # all models on official 2018-2026 data -> reports/extended_results.md
+    python main.py robust       # walk-forward test years, spike-weighted GRU, ensemble, alert probability
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from src import config  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kolkata next-day AQI forecasting")
     parser.add_argument("command", choices=["audit", "preprocess", "baseline", "train",
-                                            "evaluate", "predict", "all", "compare", "advanced", "extended"])
+                                            "evaluate", "predict", "all", "compare", "advanced", "extended", "robust"])
     parser.add_argument("--date", help="for predict: date to forecast (YYYY-MM-DD)")
     parser.add_argument("--device", default=config.DEVICE, choices=["cpu", "cuda", "mps", "auto"],
                         help="auto (default: NVIDIA GPU if available, else CPU), cuda, cpu or mps")
@@ -88,6 +89,11 @@ def main() -> None:
         from src.extended import run_extended
         print("\n### 9. Extended data 2018-2026: 8 forecasters x 3 feature sets")
         run_extended(device_name=args.device)
+
+    if cmd == "robust":
+        from src.robust import run_robust
+        print("\n### 10. Walk-forward rounds and spike-focused models")
+        run_robust(device_name=args.device)
 
 
 if __name__ == "__main__":
