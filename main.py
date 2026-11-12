@@ -31,8 +31,8 @@ def main() -> None:
     parser.add_argument("command", choices=["audit", "preprocess", "baseline", "train",
                                             "evaluate", "predict", "all", "compare"])
     parser.add_argument("--date", help="for predict: date to forecast (YYYY-MM-DD)")
-    parser.add_argument("--device", default=config.DEVICE, choices=["cpu", "mps", "auto"],
-                        help="cpu (repeatable, default), mps (Apple GPU) or auto")
+    parser.add_argument("--device", default=config.DEVICE, choices=["cpu", "cuda", "mps", "auto"],
+                        help="auto (default: NVIDIA GPU if available, else CPU), cuda, cpu or mps")
     args = parser.parse_args()
     cmd = args.command
 
@@ -75,7 +75,7 @@ def main() -> None:
     if cmd == "compare":
         from src.compare import run_comparison
         print("\n### 7. Model comparison: 5 forecasters, with and without weather")
-        run_comparison()
+        run_comparison(device_name=args.device)
 
 
 if __name__ == "__main__":

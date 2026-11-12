@@ -8,6 +8,8 @@ that memory into one number: tomorrow's AQI (in scaled units).
 
 from __future__ import annotations
 
+import os
+
 import torch
 from torch import nn
 
@@ -62,12 +64,36 @@ class AQIGRU(nn.Module):
 
 
 def pick_device(name: str = config.DEVICE) -> torch.device:
+    device = _choose_device(name)
+    if device.type == "cuda":
+        _make_gpu_deterministic()
+    return device
+
+
+def _choose_device(name: str) -> torch.device:
     if name == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
         return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     if name == "mps" and not torch.backends.mps.is_available():
         print("MPS not available - using CPU.")
         return torch.device("cpu")
+    if name == "cuda" and not torch.cuda.is_available():
+        print("CUDA not available (CPU-only PyTorch or no NVIDIA GPU) - using CPU.")
+        return torch.device("cpu")
     return torch.device(name)
+
+
+def _make_gpu_deterministic() -> None:
+    """
+    GPUs run many additions in parallel, in an order that can change between runs,
+    so results can wobble in the last digits. These settings make PyTorch use
+    repeatable GPU algorithms, so the same machine gives the same numbers each run.
+    """
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
 
 def load_checkpoint(path, device: str = "cpu"):

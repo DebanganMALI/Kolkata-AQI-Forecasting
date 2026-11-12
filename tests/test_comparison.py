@@ -95,6 +95,17 @@ class TestComparison(unittest.TestCase):
         self.assertEqual([c["name"] for c in candidates("GRU")], list(config.VARIANTS))
 
     @unittest.skipUnless(HAS_TORCH, "PyTorch not installed")
+    def test_torch_ridge_matches_textbook_ridge(self):
+        """The GPU-ready ridge gives the same answer as scikit-learn's Ridge."""
+        from sklearn.linear_model import Ridge
+        from src.compare import TorchRidge
+        X = tabular_features(self.windows.subset("train").X).astype(np.float64)
+        y = self.windows.subset("train").y_true
+        ours = TorchRidge(alpha=10.0).fit(X, y).predict(X)
+        ref = Ridge(alpha=10.0).fit(X, y).predict(X)
+        np.testing.assert_allclose(ours, ref, rtol=1e-6, atol=1e-6)
+
+    @unittest.skipUnless(HAS_TORCH, "PyTorch not installed")
     def test_gru_output_shape(self):
         import torch
         from src.model import AQIGRU

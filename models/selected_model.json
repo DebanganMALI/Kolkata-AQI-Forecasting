@@ -9,10 +9,10 @@
     46
   ],
   "validation_MAE_mean_by_variant": {
-    "level_large": 41.143,
-    "level_small": 36.331,
-    "change_large": 32.663,
-    "change_small": 31.939
+    "level_large": 41.509,
+    "level_small": 36.685,
+    "change_large": 32.49,
+    "change_small": 31.853
   },
-  "decided_at": "2026-11-12T20:19:13"
+  "decided_at": "2026-11-12T21:55:19"
 }

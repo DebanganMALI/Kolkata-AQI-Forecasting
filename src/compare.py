@@ -27,7 +27,10 @@ Rules (the same as the rest of the project):
   4. Inputs only come from days BEFORE the forecast day. The weather of the
      forecast day itself is never used.
 
-Run:  python main.py compare
+Run:  python main.py compare               (NVIDIA GPU if available, else CPU)
+      python main.py compare --device cpu  (force the CPU)
+Every model runs on the chosen device: GRU and LSTM through PyTorch, XGBoost and
+the random forest through XGBoost's CUDA mode, ridge regression through PyTorch.
 """
 
 from __future__ import annotations
@@ -97,7 +100,7 @@ def candidates(family: str) -> list[dict]:
         return [{"name": f"{m}, alpha={a}", "target_mode": m, "alpha": a}
                 for m in config.TABULAR_TARGET_MODES for a in config.RIDGE_ALPHAS]
     if family == "Random forest":
-        return [{"name": f"{m}, depth={p['max_depth']}, leaf={p['min_samples_leaf']}",
+        return [{"name": f"{m}, depth={p['max_depth']}, leaf={p['min_child_weight']}",
                  "target_mode": m, **p}
                 for m in config.TABULAR_TARGET_MODES for p in config.RF_GRID]
     if family == "XGBoost":
@@ -116,7 +119,7 @@ def seeds_for(family: str) -> list[int]:
 # ---------------------------------------------------------------------------
 # Fitting
 # ---------------------------------------------------------------------------
-def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va):
+def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
     """Same training loop as src/train.py (Adam, early stopping on validation loss)."""
     import torch
     from torch import nn
@@ -128,7 +131,7 @@ def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va):
     set_seed(seed)
     cls = AQILSTM if family == "LSTM" else AQIGRU
     model = cls(n_features=X_tr.shape[2], hidden_size=cand["hidden_size"],
-                num_layers=cand["num_layers"], dropout=config.DROPOUT)
+                num_layers=cand["num_layers"], dropout=config.DROPOUT).to(device)
     train_loader = to_loader(X_tr, y_tr, config.BATCH_SIZE, shuffle=True, seed=seed)
     val_loader = to_loader(X_va, y_va, config.BATCH_SIZE, shuffle=False, seed=seed)
     optimiser = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE,
@@ -139,6 +142,7 @@ def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va):
     for _ in range(config.MAX_EPOCHS):
         model.train()
         for xb, yb in train_loader:
+            xb, yb = xb.to(device), yb.to(device)
             optimiser.zero_grad()
             loss = loss_fn(model(xb), yb)
             loss.backward()
@@ -148,6 +152,7 @@ def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va):
         total, n = 0.0, 0
         with torch.no_grad():
             for xb, yb in val_loader:
+                xb, yb = xb.to(device), yb.to(device)
                 total += loss_fn(model(xb), yb).item() * len(yb)
                 n += len(yb)
         val_loss = total / n
@@ -163,32 +168,67 @@ def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va):
 
     def predict(X):
         with torch.no_grad():
-            return model(torch.from_numpy(X)).numpy()
+            return model(torch.from_numpy(X).to(device)).cpu().numpy()
     return model, predict
 
 
-def _fit_tabular(family, cand, seed, X_tr, y_tr, X_va, y_va):
+class TorchRidge:
+    """
+    Ridge regression solved in closed form with PyTorch, so it runs on the GPU:
+        w = (X'X + alpha*I)^-1 X'y   on centred X and y; intercept = mean of y.
+    The intercept is not penalised, exactly like scikit-learn's Ridge.
+    """
+
+    def __init__(self, alpha: float, device="cpu"):
+        self.alpha, self.device = alpha, device
+
+    def fit(self, X, y):
+        import torch
+        X = torch.as_tensor(X, dtype=torch.float64, device=self.device)
+        y = torch.as_tensor(y, dtype=torch.float64, device=self.device)
+        self.x_mean, self.y_mean = X.mean(0), y.mean()
+        Xc, yc = X - self.x_mean, y - self.y_mean
+        A = Xc.T @ Xc + self.alpha * torch.eye(X.shape[1], dtype=X.dtype, device=self.device)
+        self.coef = torch.linalg.solve(A, Xc.T @ yc)
+        return self
+
+    def predict(self, X):
+        import torch
+        X = torch.as_tensor(X, dtype=torch.float64, device=self.device)
+        return ((X - self.x_mean) @ self.coef + self.y_mean).cpu().numpy()
+
+
+def _xgb_device(device) -> str:
+    return "cuda" if str(device).startswith("cuda") else "cpu"
+
+
+def _fit_tabular(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
     if family == "Linear (ridge)":
-        from sklearn.linear_model import Ridge
-        model = Ridge(alpha=cand["alpha"]).fit(X_tr, y_tr)
+        model = TorchRidge(alpha=cand["alpha"], device=device).fit(X_tr, y_tr)
         return model, model.predict
     if family == "Random forest":
-        from sklearn.ensemble import RandomForestRegressor
-        model = RandomForestRegressor(n_estimators=config.RF_TREES, max_depth=cand["max_depth"],
-                                      min_samples_leaf=cand["min_samples_leaf"],
-                                      random_state=seed, n_jobs=-1).fit(X_tr, y_tr)
+        from xgboost import XGBRegressor
+        # One round of RF_TREES trees grown side by side on random row samples and
+        # averaged (learning_rate 1, almost no penalty) = a random forest.
+        model = XGBRegressor(n_estimators=1, num_parallel_tree=config.RF_TREES,
+                             learning_rate=1.0, reg_lambda=1e-5,
+                             max_depth=cand["max_depth"], min_child_weight=cand["min_child_weight"],
+                             subsample=config.RF_ROW_SAMPLE, colsample_bynode=1.0,
+                             random_state=seed, n_jobs=1, verbosity=0,
+                             device=_xgb_device(device)).fit(X_tr, y_tr)
         return model, model.predict
     if family == "XGBoost":
         from xgboost import XGBRegressor
         model = XGBRegressor(**config.XGB_PARAMS, max_depth=cand["max_depth"], random_state=seed,
-                             n_jobs=1, early_stopping_rounds=config.XGB_EARLY_STOPPING)
+                             n_jobs=1, verbosity=0, early_stopping_rounds=config.XGB_EARLY_STOPPING,
+                             device=_xgb_device(device))
         # validation is used to decide when to stop adding trees (like early stopping for the nets)
         model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
         return model, lambda X: model.predict(X, iteration_range=(0, model.best_iteration + 1))
     raise ValueError(family)
 
 
-def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str]):
+def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str], device="cpu"):
     """Train one model and return its real-AQI forecasts for the requested splits."""
     windows, scaler = data
     w_tr, w_va = windows.subset("train"), windows.subset("val")
@@ -199,10 +239,11 @@ def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str]):
 
     if family in NEURAL:
         inputs = lambda w: w.X                               # noqa: E731
-        model, predict = _train_sequence(family, cand, seed, w_tr.X, y_tr, w_va.X, y_va)
+        model, predict = _train_sequence(family, cand, seed, w_tr.X, y_tr, w_va.X, y_va, device)
     else:
         inputs = lambda w: tabular_features(w.X)             # noqa: E731
-        model, predict = _fit_tabular(family, cand, seed, inputs(w_tr), y_tr, inputs(w_va), y_va)
+        model, predict = _fit_tabular(family, cand, seed, inputs(w_tr), y_tr, inputs(w_va), y_va,
+                                      device)
 
     out = {}
     for s in splits:
@@ -211,11 +252,20 @@ def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str]):
     return out, model
 
 
+def _pick_device(name: str):
+    """'cpu' unless asked otherwise; falls back to CPU if CUDA is not usable."""
+    if name == "cpu":
+        return "cpu"
+    from src.model import pick_device
+    return pick_device(name)
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
-def run_comparison(verbose: bool = True) -> dict:
+def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
     t0 = time.time()
+    device = _pick_device(device_name)
     data = {fs: build_windows(w) for fs, w in FEATURE_SETS.items()}
     ref = data["pollution"][0]
     if not np.array_equal(ref.target_dates, data["pollution+weather"][0].target_dates):
@@ -225,7 +275,8 @@ def run_comparison(verbose: bool = True) -> dict:
     if verbose:
         print(f"Forecast days: train {len(ref.subset('train'))} | val {len(ref.subset('val'))} | "
               f"test {len(ref.subset('test'))}")
-        print(f"Phase 1 - choosing settings on VALIDATION ({n_models} models, CPU)...\n")
+        print(f"Device: {device} (all five forecasters)")
+        print(f"Phase 1 - choosing settings on VALIDATION ({n_models} models)...\n")
 
     # ---- Phase 1: every candidate, validation only ------------------------
     rows = []
@@ -235,7 +286,7 @@ def run_comparison(verbose: bool = True) -> dict:
             tf = time.time()
             for cand in candidates(family):
                 for seed in seeds_for(family):
-                    preds, _ = fit_predict(family, cand, seed, d, ["val"])
+                    preds, _ = fit_predict(family, cand, seed, d, ["val"], device)
                     m = regression_metrics(y_val, preds["val"])
                     rows.append({"feature_set": fs, "family": family, "candidate": cand["name"],
                                  "seed": seed, "val_MAE": m["MAE"], "val_RMSE": m["RMSE"],
@@ -282,14 +333,14 @@ def run_comparison(verbose: bool = True) -> dict:
         cand = next(c for c in candidates(family) if c["name"] == r["candidate"])
         val_runs, test_runs, models = [], [], []
         for seed in seeds_for(family):
-            preds, model = fit_predict(family, cand, seed, data[fs], ["val", "test"])
+            preds, model = fit_predict(family, cand, seed, data[fs], ["val", "test"], device)
             val_runs.append(preds["val"])
             test_runs.append(preds["test"])
             models.append(model)
         final[(fs, family)] = {"candidate": cand["name"], "val": np.mean(val_runs, axis=0),
                                "test": np.mean(test_runs, axis=0), "models": models}
 
-    result = _score_and_report(data, selected, overall, final, time.time() - t0)
+    result = _score_and_report(data, selected, overall, final, time.time() - t0, str(device))
     if verbose:
         _print_summary(result)
     return result
@@ -298,7 +349,7 @@ def run_comparison(verbose: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 # Scoring and report
 # ---------------------------------------------------------------------------
-def _score_and_report(data, selected, overall, final, seconds: float) -> dict:
+def _score_and_report(data, selected, overall, final, seconds: float, device: str) -> dict:
     w_val = data["pollution"][0].subset("val")
     w_te = data["pollution"][0].subset("test")
     y, persistence = w_te.y_true, w_te.last_aqi.copy()
@@ -347,7 +398,7 @@ def _score_and_report(data, selected, overall, final, seconds: float) -> dict:
     preds.to_csv(config.COMPARISON_PREDICTIONS_CSV, index=False)
 
     r = {"test": test, "weather": weather, "selected": selected, "overall": overall,
-         "importance": importance, "seconds": seconds, "n_test": len(y)}
+         "importance": importance, "seconds": seconds, "n_test": len(y), "device": device}
     fig = _plot(test)
     _write_report(r, fig)
     return r
@@ -390,7 +441,8 @@ def _write_report(r: dict, fig) -> None:
 
     L = ["# Model Comparison: Which Forecaster Works Best, and Does Weather Help?", "",
          f"*Generated by `python main.py compare` on {datetime.now():%Y-%m-%d %H:%M} "
-         f"({r['seconds'] / 60:.1f} min on CPU). All numbers come from this run.*", "",
+         f"({r['seconds'] / 60:.1f} min on `{r['device']}`). "
+         "All numbers come from this run.*", "",
          "## How the comparison was run", "",
          "- **Task:** forecast tomorrow's AQI for Kolkata from the previous "
          f"{config.LOOKBACK} days, the same task and the same days as the main LSTM.",
@@ -400,7 +452,7 @@ def _write_report(r: dict, fig) -> None:
          f"`pollution+weather` (the same plus {len(config.WEATHER_FEATURES)} daily weather "
          "inputs from Open-Meteo).",
          "- **Forecasters:** persistence (tomorrow = today), ridge (linear) regression, "
-         "random forest, XGBoost, GRU and LSTM.",
+         "random forest (XGBoost's random-forest mode), XGBoost, GRU and LSTM.",
          "- **Choosing settings:** each forecaster has a small fixed list of settings "
          "(`src/config.py`). For each forecaster and feature set, the one with the lowest mean "
          f"validation MAE was chosen. Models with randomness used {len(config.SEEDS)} seeds, "

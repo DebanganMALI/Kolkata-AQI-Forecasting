@@ -82,9 +82,11 @@ MAX_EPOCHS = 200
 PATIENCE = 20              # early stopping: stop after 20 epochs without improvement
 GRAD_CLIP = 1.0
 SEED = 42                  # used when a single seed is needed
-# "cpu" gives repeatable numbers on every run. "mps" (Apple GPU) also works but
-# can give slightly different numbers between runs. "auto" picks mps if available.
-DEVICE = "cpu"
+# "auto" (default) uses the NVIDIA GPU when the CUDA build of PyTorch can see one,
+# otherwise the CPU. On the GPU, deterministic mode is switched on (src/model.py),
+# so the same machine gives the same numbers on every run; they can differ very
+# slightly from CPU numbers. "cpu", "cuda" and "mps" (Apple GPU) force one device.
+DEVICE = "auto"
 
 # ---------------------------------------------------------------------------
 # Experiment (fixed BEFORE seeing any of its results)
@@ -165,8 +167,13 @@ TABULAR_TARGET_MODES = ["level", "change"]     # same two options as the LSTM
 
 # Candidate settings for each forecaster (the best is chosen on validation)
 RIDGE_ALPHAS = [0.1, 1.0, 10.0, 100.0, 1000.0]
+# Random forest = XGBoost's random-forest mode (num_parallel_tree), so it can run on
+# the GPU: many full-size trees, each grown on a random 63% of the training rows
+# (about the share a bootstrap sample contains), averaged. min_child_weight plays
+# the role of "minimum samples per leaf" for squared-error regression.
 RF_TREES = 300
-RF_GRID = [{"max_depth": d, "min_samples_leaf": leaf} for d in (4, 8, None) for leaf in (1, 5)]
+RF_ROW_SAMPLE = 0.632
+RF_GRID = [{"max_depth": d, "min_child_weight": leaf} for d in (4, 8, 12) for leaf in (1, 5)]
 XGB_GRID = [{"max_depth": d} for d in (2, 3, 4)]
 XGB_PARAMS = {"n_estimators": 2000, "learning_rate": 0.03, "subsample": 0.8,
               "colsample_bytree": 0.8, "min_child_weight": 3, "reg_lambda": 1.0}

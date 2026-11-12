@@ -10,26 +10,26 @@
     {
       "feature_set": "pollution",
       "family": "Random forest",
-      "candidate": "level, depth=8, leaf=1",
-      "val_MAE_mean": 25.876
+      "candidate": "level, depth=4, leaf=1",
+      "val_MAE_mean": 26.931
     },
     {
       "feature_set": "pollution",
       "family": "XGBoost",
       "candidate": "level, depth=4",
-      "val_MAE_mean": 26.772
+      "val_MAE_mean": 26.264
     },
     {
       "feature_set": "pollution",
       "family": "GRU",
       "candidate": "level_small",
-      "val_MAE_mean": 30.53
+      "val_MAE_mean": 30.884
     },
     {
       "feature_set": "pollution",
       "family": "LSTM",
       "candidate": "change_small",
-      "val_MAE_mean": 31.939
+      "val_MAE_mean": 31.853
     },
     {
       "feature_set": "pollution+weather",
@@ -41,31 +41,31 @@
       "feature_set": "pollution+weather",
       "family": "Random forest",
       "candidate": "level, depth=4, leaf=1",
-      "val_MAE_mean": 27.772
+      "val_MAE_mean": 28.535
     },
     {
       "feature_set": "pollution+weather",
       "family": "XGBoost",
       "candidate": "level, depth=2",
-      "val_MAE_mean": 27.176
+      "val_MAE_mean": 26.746
     },
     {
       "feature_set": "pollution+weather",
       "family": "GRU",
       "candidate": "change_small",
-      "val_MAE_mean": 32.32
+      "val_MAE_mean": 32.184
     },
     {
       "feature_set": "pollution+weather",
       "family": "LSTM",
       "candidate": "change_small",
-      "val_MAE_mean": 31.642
+      "val_MAE_mean": 31.826
     }
   ],
   "overall_choice_on_validation": {
     "feature_set": "pollution",
-    "family": "Random forest",
-    "candidate": "level, depth=8, leaf=1"
+    "family": "XGBoost",
+    "candidate": "level, depth=4"
   },
-  "decided_at": "2026-11-12T21:29:01"
+  "decided_at": "2026-11-12T22:00:17"
 }
