@@ -316,4 +316,4 @@ Engineering, Institute of Engineering and Management (IEM), Kolkata.
 |---|---|
 | **Debangan Mali** | Extended the project: collected the official 2018-2026 data (CPCB city AQI and 7 stations, Open-Meteo weather, NASA FIRMS fires, festival calendar) and built the extended pipeline; added the model comparison with weather, the advanced networks (attention LSTM, TCN, Transformer, forecast ranges, multi-horizon) and the learning curve; moved training to the GPU; ran all final experiments; wrote the documentation |
 | **Sweta** | Started the project: chose the problem and the Kaggle dataset, wrote the dataset audit, preprocessing and chronological split, the persistence baseline, the first LSTM and its multi-seed experiment design, and the research-rule tests |
-| **Tanisha** | Emotional support (details to be added) |
+| **Tanisha** | Tracked project progress across every stage, from the first baseline through the extended 2018-2026 experiments and the final walk-forward evaluation; managed team communication, keeping members aligned on milestones, deadlines and deliverables; reviewed the documentation and the final report |
