@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="preload" as="image" href="img/kolkata-1920.jpg">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#13110e; --panel:#1c1915; --panel2:#24201b; --ink:#f3ede2; --ink2:#c2b8a8; --ink3:#8a8174; --line:#332e27;
@@ -540,7 +540,7 @@ function highTable(){
   $("prev").onclick=()=>show((mode==="test"?idx:fidx)-1);$("next").onclick=()=>show((mode==="test"?idx:fidx)+1);
   $("mTest").onclick=()=>{setMode("test");show(idx)};$("mFut").onclick=()=>{setMode("future");show(fidx)};
   document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT")return;const i=mode==="test"?idx:fidx;if(e.key==="ArrowLeft")show(i-1);if(e.key==="ArrowRight")show(i+1)});
-  cards();if(O)fcards();setRanges();highTable();
+  cards();if(O)fcards();setRanges();highTable();draw();
   const s=days.findIndex(d=>d.date==="2025-12-12");idx=s>=0?s:0;
   if(fut.length){
     const today=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
