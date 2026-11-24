@@ -1,9 +1,4 @@
-"""
-Checks for the live website forecast.
-
-Run from the project root:
-    python -m unittest discover -s tests -v
-"""
+"""Checks for the live website forecast."""
 
 import sys
 import unittest
@@ -12,12 +7,14 @@ from pathlib import Path
 
 import numpy as np
 
+# Make the project and scripts importable.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import live_forecast as lf  # noqa: E402
+import live_forecast as lf
 
+# Skip the PyTorch check when it is missing.
 try:
     import torch
     HAS_TORCH = True
@@ -26,7 +23,9 @@ except ImportError:
 
 
 class TestLiveAQI(unittest.TestCase):
+    """Checks of the live AQI calculation."""
     def test_city_aqi_is_mean_of_station_maxima(self):
+        """City AQI is the mean of station maxima."""
         recs = [{"station": "A", "pollutant_id": "PM10", "avg_value": "64"},
                 {"station": "A", "pollutant_id": "NO2", "avg_value": "30"},
                 {"station": "A", "pollutant_id": "CO", "avg_value": "80"},
@@ -37,10 +36,12 @@ class TestLiveAQI(unittest.TestCase):
         self.assertEqual(lf.city_aqi_from_records(recs), (90.0, 2))
 
     def test_station_without_pm_is_ignored(self):
+        """A station without PM readings is ignored."""
         recs = [{"station": "A", "pollutant_id": p, "avg_value": "50"} for p in ("NO2", "CO", "SO2")]
         self.assertEqual(lf.city_aqi_from_records(recs), (None, 0))
 
     def test_inputs_carry_forward_at_most_7_days(self):
+        """Missing inputs carry forward at most 7 days."""
         d0 = date(2026, 11, 1)
         hist = {d0.isoformat(): {"aqi": "100"}}
         days = [d0 + timedelta(days=k) for k in range(8)]
@@ -50,7 +51,9 @@ class TestLiveAQI(unittest.TestCase):
 
 @unittest.skipUnless(HAS_TORCH, "PyTorch not installed")
 class TestNumpyGRU(unittest.TestCase):
+    """Checks of the NumPy GRU."""
     def test_numpy_gru_matches_pytorch(self):
+        """The NumPy GRU matches PyTorch."""
         from src.live_model import FEATURES, HIDDEN, export_weights, numpy_gru
         from src.model import AQIGRU
         torch.manual_seed(0)

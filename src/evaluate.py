@@ -1,24 +1,4 @@
-"""
-Evaluate forecasts: LSTM variants vs the persistence baseline.
-
-Metrics (all in AQI units unless stated):
-  MAE   - mean absolute error: on average, how many AQI points off we are.
-  RMSE  - root mean squared error: like MAE but punishes big misses more.
-  MAPE  - mean absolute percentage error: average % off.
-  R2    - share of the day-to-day variation explained (1 = perfect, 0 = no better
-          than always guessing the average, negative = worse than that).
-  Bias  - mean (prediction - actual): positive means we over-predict on average.
-
-Alert metrics (alert = forecast above a threshold, compared with actual AQI > 200):
-  Precision - of the alerts raised, the share that were real high-pollution days.
-  Recall    - of the real high-pollution days, the share that got an alert.
-  F1        - a single score balancing precision and recall.
-
-Order of work (so the test period cannot influence any choice):
-  1. The variant was already chosen in train.py from VALIDATION results.
-  2. Alert thresholds are tuned on VALIDATION.
-  3. Only then is everything scored on the TEST period, once.
-"""
+"""Evaluates forecasts: metrics, alerts, block bootstrap and the LSTM vs persistence test."""
 
 from __future__ import annotations
 
@@ -33,16 +13,14 @@ from src.baseline import persistence_predict
 from src.dataset import Windows, decode_target, make_windows
 from src.preprocessing import StandardScaler, load_processed, run_preprocessing
 
-# Plot colours (validated palette: blue / orange series, neutral greys for text)
+# Figure colours.
 BLUE, ORANGE, INK, INK2, GRID, SURFACE, RED = (
     "#2a78d6", "#eb6834", "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb", "#d03b3b")
-ACTUAL_HIGH = config.ALERT_THRESHOLD  # a "high-pollution day" is always actual AQI > 200
+ACTUAL_HIGH = config.ALERT_THRESHOLD
 
 
-# ---------------------------------------------------------------------------
-# Metrics
-# ---------------------------------------------------------------------------
 def regression_metrics(y: np.ndarray, pred: np.ndarray) -> dict:
+    """MAE, RMSE, MAPE, R squared and bias."""
     y, pred = np.asarray(y, float), np.asarray(pred, float)
     err = pred - y
     ss_res = float(np.sum(err ** 2))
@@ -57,7 +35,7 @@ def regression_metrics(y: np.ndarray, pred: np.ndarray) -> dict:
 
 
 def alert_metrics(y: np.ndarray, pred: np.ndarray, threshold: float = config.ALERT_THRESHOLD) -> dict:
-    """Alert when the forecast is above `threshold`; truth is always actual AQI > 200."""
+    """Precision, recall and F1 of alerts for actual AQI above 200."""
     actual = np.asarray(y) > ACTUAL_HIGH
     raised = np.asarray(pred) > threshold
     tp = int(np.sum(actual & raised))
@@ -74,7 +52,7 @@ def alert_metrics(y: np.ndarray, pred: np.ndarray, threshold: float = config.ALE
 
 
 def tune_threshold(y_val: np.ndarray, pred_val: np.ndarray) -> int:
-    """Alert threshold with the best validation F1 (ties -> closest to 200)."""
+    """Alert threshold with the best validation F1."""
     best_t, best_f1 = config.ALERT_THRESHOLD, -1.0
     for t in config.ALERT_THRESHOLD_GRID:
         f1 = alert_metrics(y_val, pred_val, t)["F1"]
@@ -87,13 +65,9 @@ def tune_threshold(y_val: np.ndarray, pred_val: np.ndarray) -> int:
 
 def block_bootstrap_mae_diff(y, p_a, p_b, resamples: int = config.BOOTSTRAP_RESAMPLES,
                              block: int = config.BOOTSTRAP_BLOCK_DAYS, seed: int = config.SEED):
-    """
-    95% interval for MAE(a) - MAE(b) on the same days. Days are resampled in
-    blocks of consecutive days, because neighbouring days are not independent.
-    If the interval contains 0, the data cannot tell the two forecasts apart.
-    """
+    """95% block-bootstrap interval for the MAE difference of two forecasts."""
     y, p_a, p_b = (np.asarray(v, float) for v in (y, p_a, p_b))
-    d = np.abs(p_a - y) - np.abs(p_b - y)   # per-day difference in absolute error
+    d = np.abs(p_a - y) - np.abs(p_b - y)
     n = len(d)
     block = max(1, min(block, n))
     rng = np.random.default_rng(seed)
@@ -107,10 +81,8 @@ def block_bootstrap_mae_diff(y, p_a, p_b, resamples: int = config.BOOTSTRAP_RESA
     return float(d.mean()), float(lo), float(hi)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def _windows(scaler: StandardScaler | None = None):
+    """Build windows with the saved scaler."""
     if not config.PROCESSED_CSV.exists() or not config.SCALER_JSON.exists():
         run_preprocessing(verbose=False)
     clean = load_processed()
@@ -119,6 +91,7 @@ def _windows(scaler: StandardScaler | None = None):
 
 
 def _fmt_table(rows: list[dict], cols: list[str]) -> str:
+    """Format rows as a Markdown table."""
     lines = ["| " + " | ".join(cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
     for r in rows:
         cells = []
@@ -135,15 +108,14 @@ def _fmt_table(rows: list[dict], cols: list[str]) -> str:
 
 
 def _pm(values, digits: int = 1) -> str:
+    """Format a mean plus or minus standard deviation."""
     v = np.asarray(values, float)
     f = f"{{:.{digits}f}}"
     return (f.format(v.mean()) + " ± " + f.format(v.std(ddof=1))) if len(v) > 1 else f.format(v.mean())
 
 
-# ---------------------------------------------------------------------------
-# Baseline-only evaluation (works without PyTorch)
-# ---------------------------------------------------------------------------
 def evaluate_baseline(verbose: bool = True) -> list[dict]:
+    """Score persistence on validation and test."""
     windows, _ = _windows()
     rows = []
     for split in ("val", "test"):
@@ -160,11 +132,8 @@ def evaluate_baseline(verbose: bool = True) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# LSTM ensembles
-# ---------------------------------------------------------------------------
 def load_variant(variant: str, device):
-    """Load the trained model for every seed of one variant."""
+    """Load the trained model of every seed of one variant."""
     from src.model import load_checkpoint
     from src.train import checkpoint_path
 
@@ -178,7 +147,7 @@ def load_variant(variant: str, device):
 
 
 def predict_variant(models, w: Windows, device) -> np.ndarray:
-    """Real-AQI forecasts, one row per seed: shape (seeds, samples)."""
+    """Real-AQI forecasts of every seed of one variant."""
     import torch
     preds = []
     for model, ckpt in models:
@@ -190,10 +159,8 @@ def predict_variant(models, w: Windows, device) -> np.ndarray:
     return np.vstack(preds)
 
 
-# ---------------------------------------------------------------------------
-# Full evaluation
-# ---------------------------------------------------------------------------
 def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
+    """Score the chosen LSTM against persistence on the test period."""
     from src.model import pick_device
 
     if not config.SELECTED_JSON.exists():
@@ -204,18 +171,16 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
 
     all_models = {v: load_variant(v, device) for v in config.VARIANTS}
     ckpt0 = all_models[selected][0][1]
-    scaler = StandardScaler(**ckpt0["scaler"])  # exactly the scaler used in training
+    scaler = StandardScaler(**ckpt0["scaler"])
     windows, _ = _windows(scaler)
     w_val, w_test = windows.subset("val"), windows.subset("test")
 
-    # Forecasts for every variant (per seed) and the 5-seed average ("ensemble")
     P = {v: {s: predict_variant(m, w, device) for s, w in (("val", w_val), ("test", w_test))}
          for v, m in all_models.items()}
     pers = {"val": persistence_predict(w_val), "test": persistence_predict(w_test)}
     y = {"val": w_val.y_true, "test": w_test.y_true}
     ens = {s: P[selected][s].mean(axis=0) for s in ("val", "test")}
 
-    # --- Table A: validation, all variants (this is what selection used)
     tA = []
     for v in config.VARIANTS:
         per_seed = [regression_metrics(y["val"], p) for p in P[v]["val"]]
@@ -230,11 +195,9 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
                "MAE (mean ± sd over seeds)": f"{pv['MAE']:.1f}", "RMSE": f"{pv['RMSE']:.1f}",
                "Bias": f"{pv['Bias']:+.1f}"})
 
-    # --- Alert thresholds tuned on VALIDATION (before looking at test)
     thr_lstm = tune_threshold(y["val"], ens["val"])
     thr_pers = tune_threshold(y["val"], pers["val"])
 
-    # ===================== TEST (scored once, after all choices) =====================
     single = [regression_metrics(y["test"], p) for p in P[selected]["test"]]
     m_ens = regression_metrics(y["test"], ens["test"])
     m_pers = regression_metrics(y["test"], pers["test"])
@@ -249,7 +212,7 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
     ]
     diff, lo, hi = block_bootstrap_mae_diff(y["test"], ens["test"], pers["test"])
 
-    tD = []  # transparency: test for every variant (NOT used for any choice)
+    tD = []
     for v in config.VARIANTS:
         e = regression_metrics(y["test"], P[v]["test"].mean(axis=0))
         tD.append({"variant": v + (" (selected)" if v == selected else ""),
@@ -257,19 +220,18 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
                    "test MAE, single runs": _pm([regression_metrics(y["test"], p)["MAE"] for p in P[v]["test"]]),
                    "test Bias": f"{e['Bias']:+.1f}"})
 
-    tE = []  # alerts at the project threshold (200)
+    tE = []
     for split in ("val", "test"):
         for name, p in ((f"LSTM {selected} (avg of 5)", ens[split]), ("Persistence", pers[split])):
             tE.append({"split": split, "model": name, **alert_metrics(y[split], p)})
 
-    tF = []  # alerts with validation-tuned thresholds, scored on test
+    tF = []
     for name, p_val, p_test, t in ((f"LSTM {selected} (avg of 5)", ens["val"], ens["test"], thr_lstm),
                                    ("Persistence", pers["val"], pers["test"], thr_pers)):
         a = alert_metrics(y["test"], p_test, t)
         tF.append({"model": name, "threshold (from validation)": t,
                    "validation F1": alert_metrics(y["val"], p_val, t)["F1"], **a})
 
-    # --- Error by month / lockdown on test
     dates = pd.to_datetime(w_test.target_dates)
     df = pd.DataFrame({"date": dates, "actual": y["test"], "lstm": ens["test"], "pers": pers["test"]})
     df["month"] = df["date"].dt.strftime("%Y-%m")
@@ -284,7 +246,6 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
                        "Persistence MAE": (d["pers"] - d["actual"]).abs().mean(),
                        "Persistence bias": (d["pers"] - d["actual"]).mean()})
 
-    # --- Save predictions and figures
     out = pd.DataFrame({
         "date": dates.strftime("%Y-%m-%d"),
         "actual_AQI": y["test"],
@@ -330,6 +291,7 @@ def evaluate(device_name: str = "cpu", verbose: bool = True) -> dict:
 
 
 def _write_results(r: dict) -> None:
+    """Write the results report."""
     ck, sel, m_ens, m_pers = r["ckpt0"], r["selected"], r["m_ens"], r["m_pers"]
     better = m_ens["MAE"] < m_pers["MAE"]
     ci_has_zero = r["lo"] <= 0 <= r["hi"]
@@ -420,10 +382,8 @@ def _write_results(r: dict) -> None:
     config.RESULTS_MD.write_text("\n".join(L), encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Plots
-# ---------------------------------------------------------------------------
 def style_axes(ax) -> None:
+    """Apply the shared figure style."""
     ax.set_facecolor(SURFACE)
     ax.figure.set_facecolor(SURFACE)
     for s in ("top", "right"):
@@ -439,6 +399,7 @@ def style_axes(ax) -> None:
 
 def _plot_results(w: Windows, per_seed: np.ndarray, p_lstm: np.ndarray,
                   p_pers: np.ndarray, variant: str) -> list:
+    """Draw the test forecast figures."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -450,7 +411,6 @@ def _plot_results(w: Windows, per_seed: np.ndarray, p_lstm: np.ndarray,
     paths = []
     dates = pd.to_datetime(w.target_dates)
 
-    # 1. Actual vs predicted over the test period
     fig, ax = plt.subplots(figsize=(11, 4.5))
     ax.fill_between(dates, per_seed.min(axis=0), per_seed.max(axis=0), color=BLUE, alpha=0.15,
                     linewidth=0, label="LSTM range over 5 runs")
@@ -474,7 +434,6 @@ def _plot_results(w: Windows, per_seed: np.ndarray, p_lstm: np.ndarray,
     plt.close(fig)
     paths.append(p)
 
-    # 2. Predicted vs actual scatter (two panels, same axes)
     lim = (0, max(w.y_true.max(), p_lstm.max(), p_pers.max()) * 1.05)
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.6), sharex=True, sharey=True)
     for ax, pred, name, col in ((axes[0], p_lstm, f"LSTM {variant} (avg of 5)", BLUE),

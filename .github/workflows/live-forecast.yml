@@ -1,13 +1,17 @@
+# GitHub Actions job: every evening, adds CPCB's new bulletins and weather, rebuilds the outlook and saves it.
 name: Daily live update
 
+# Run daily at 12:15 UTC (17:45 IST, after the 4 PM bulletin), or by hand from the Actions tab.
 on:
   schedule:
-    - cron: "15 12 * * *"      # 12:15 UTC = 17:45 IST, after CPCB's 4 PM bulletin is online
-  workflow_dispatch:            # run it by hand from the Actions tab
+    - cron: "15 12 * * *"
+  workflow_dispatch:
 
+# Allow the job to commit the updated data.
 permissions:
   contents: write
 
+# Never run two updates at the same time.
 concurrency:
   group: live-update
   cancel-in-progress: false
@@ -16,18 +20,23 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      # Get the repository.
       - uses: actions/checkout@v4
 
+      # Set up Python.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # Install the few libraries the update needs.
       - name: Install
         run: pip install "numpy>=2.0" "pandas>=2.2" "pypdf>=5.0"
 
+      # Download bulletins and weather, then rebuild the outlook.
       - name: Official AQI, weather, new outlook
         run: python scripts/update_live.py
 
+      # Commit the new data if anything changed.
       - name: Save
         run: |
           git config user.name "Debangan Mali"

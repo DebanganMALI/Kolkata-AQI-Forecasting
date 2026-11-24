@@ -1,14 +1,4 @@
-"""
-Enlarge the website illustration to 4K on the GPU, without sharpening.
-
-    pip install spandrel
-    python scripts/upscale_art.py web/img/kolkata.png
-
-Uses Real-ESRGAN (anime 6B), a model made for illustrations with clean
-outlines and flat colour: it rebuilds detail at 4x, and the result is then
-resized down to 3840 x 2160 with a plain Lanczos filter (no sharpening).
-Writes web/img/kolkata-3840.jpg and web/img/kolkata-1920.jpg.
-"""
+"""Enlarges the website painting to 4K on the GPU with Real-ESRGAN, without sharpening."""
 
 from __future__ import annotations
 
@@ -20,6 +10,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+# Project folder, model weights and tile sizes.
 ROOT = Path(__file__).resolve().parents[1]
 WEIGHTS_URL = ("https://github.com/xinntao/Real-ESRGAN/releases/download/"
                "v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth")
@@ -28,6 +19,7 @@ TILE, PAD = 384, 16
 
 
 def load_model(device):
+    """Download (once) and load the Real-ESRGAN upscaler."""
     from spandrel import ModelLoader
     if not WEIGHTS.exists():
         WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +30,7 @@ def load_model(device):
 
 @torch.no_grad()
 def upscale(model, img: np.ndarray, device) -> np.ndarray:
-    """Tile by tile with overlap, so it fits in GPU memory."""
+    """Upscale the image tile by tile so it fits in GPU memory."""
     h, w, _ = img.shape
     s = model.scale
     x = torch.from_numpy(img).permute(2, 0, 1)[None].float().div(255).to(device)
@@ -55,6 +47,7 @@ def upscale(model, img: np.ndarray, device) -> np.ndarray:
 
 
 def main() -> None:
+    """Upscale the painting and save 3840 and 1920 pixel JPEGs."""
     src = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "web" / "img" / "kolkata.png")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     img = np.array(Image.open(src).convert("RGB"))

@@ -1,22 +1,4 @@
-"""
-Kolkata Air Quality Forecasting - command-line entry point.
-
-Run from the project root (with the .venv activated):
-
-    python main.py audit        # dataset audit -> reports/dataset_audit.md
-    python main.py preprocess   # clean table + scaler + decision log
-    python main.py baseline     # persistence baseline scores (no PyTorch needed)
-    python main.py train        # train 4 LSTM variants x 5 seeds, pick one on validation
-    python main.py evaluate     # selected LSTM vs persistence on test -> reports/results.md
-    python main.py predict      # forecast the day after the dataset ends
-    python main.py predict --date 2020-01-15   # forecast a past date and compare
-    python main.py all          # everything above, in order (the full demo)
-    python main.py compare      # 5 model families, with and without weather -> reports/model_comparison.md
-    python main.py advanced     # attention LSTM, TCN, Transformer, forecast ranges, 1/3/7 days ahead
-    python main.py extended     # all models on official 2018-2026 data -> reports/extended_results.md
-    python main.py robust       # walk-forward test years, spike-weighted GRU, ensemble, alert probability
-    python main.py live-train   # GRU for the website's daily forecast (city AQI + weather inputs)
-"""
+"""Command-line entry point: runs each stage of the project (audit, preprocess, train, evaluate, experiments)."""
 
 from __future__ import annotations
 
@@ -24,13 +6,14 @@ import argparse
 import sys
 from pathlib import Path
 
-# Make "from src import ..." work when run as `python main.py`
+# Make the src package importable when run from the project folder.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src import config  # noqa: E402
+from src import config
 
 
 def main() -> None:
+    """Parse the command and run the matching project stage."""
     parser = argparse.ArgumentParser(description="Kolkata next-day AQI forecasting")
     parser.add_argument("command", choices=["audit", "preprocess", "baseline", "train",
                                             "evaluate", "predict", "all", "compare", "advanced", "extended", "robust", "live-train"])
@@ -71,8 +54,8 @@ def main() -> None:
         from src.predict import forecast, print_forecast
         print("\n### 6. Forecast demonstration")
         if cmd == "all":
-            print_forecast(forecast("2020-01-15", device_name=args.device))  # a winter test day
-            print_forecast(forecast(None, device_name=args.device))           # day after data ends
+            print_forecast(forecast("2020-01-15", device_name=args.device))
+            print_forecast(forecast(None, device_name=args.device))
         else:
             print_forecast(forecast(args.date, device_name=args.device))
 

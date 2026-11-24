@@ -1,27 +1,4 @@
-"""
-Dataset inspection and audit for the Kolkata Air Quality Forecasting project.
-
-What this script does
----------------------
-1. Reads the raw Kaggle file  data/raw/city_day.csv  (read-only - it is never
-   modified, cleaned, or re-saved).
-2. Keeps only the rows where City == "Kolkata".
-3. Computes factual statistics: row counts, date coverage, missing values,
-   duplicates, missing dates, AQI distribution, implausible values, and how
-   many usable next-day forecasting samples exist WITHOUT any imputation.
-4. Writes a Markdown report to  reports/dataset_audit.md  and (if matplotlib is
-   installed) three-four figures to  reports/figures/.
-
-What this script deliberately does NOT do
------------------------------------------
-- No imputation (filling gaps), no outlier removal, no feature engineering.
-- No model training.
-- No external / weather data.
-Every number in the report is calculated from the CSV at run time.
-
-Run from the project root:
-    python src/inspect_data.py
-"""
+"""Audits the raw Kaggle data for Kolkata: coverage, gaps, categories and figures."""
 
 from __future__ import annotations
 
@@ -34,18 +11,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Paths (resolved relative to this file, so it works from the project root)
-# ---------------------------------------------------------------------------
+# Project folders and input file.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = PROJECT_ROOT / "data" / "raw" / "city_day.csv"
 REPORT_PATH = PROJECT_ROOT / "reports" / "dataset_audit.md"
 FIG_DIR = PROJECT_ROOT / "reports" / "figures"
 
+# City name.
 CITY = "Kolkata"
-ALERT_THRESHOLD = 200  # project's high-pollution alert level
+ALERT_THRESHOLD = 200
 
-# Indian National AQI (CPCB) categories. Upper bound is inclusive.
+# CPCB AQI categories.
 AQI_CATEGORIES = [
     ("Good", 0, 50),
     ("Satisfactory", 51, 100),
@@ -56,26 +32,24 @@ AQI_CATEGORIES = [
 ]
 CATEGORY_ORDER = [c[0] for c in AQI_CATEGORIES]
 
+# Columns that are not pollutants.
 NON_POLLUTANT_COLUMNS = {"City", "Date", "AQI", "AQI_Bucket"}
 
-# Lookback windows (days of history) used to count possible training samples.
+# Window lengths to check.
 LOOKBACKS = [1, 7, 14, 30]
 
-# Illustrative chronological split (fractions of the calendar range).
+# Split fractions used in the audit.
 SPLIT_FRACTIONS = (0.70, 0.15, 0.15)
 
-# A pollutant missing more than this share of days is called "excessively incomplete".
+# Missing-value threshold.
 HEAVY_MISSING_PCT = 30.0
 
-# Known external context (NOT derived from the CSV): India's national COVID-19
-# lockdown began on 2020-03-25. Used only to count how many rows fall after it.
+# Lockdown start date.
 LOCKDOWN_START = pd.Timestamp("2020-03-25")
 
 
-# ---------------------------------------------------------------------------
-# Small helpers
-# ---------------------------------------------------------------------------
 def sha256_of(path: Path) -> str:
+    """SHA-256 hash of a file."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -84,7 +58,7 @@ def sha256_of(path: Path) -> str:
 
 
 def md_table(df: pd.DataFrame, index: bool = False, floatfmt: str = "{:.2f}") -> str:
-    """Render a DataFrame as a Markdown table (no extra packages needed)."""
+    """Render a DataFrame as a Markdown table."""
     if index:
         df = df.reset_index()
     cols = [str(c) for c in df.columns]
@@ -103,7 +77,7 @@ def md_table(df: pd.DataFrame, index: bool = False, floatfmt: str = "{:.2f}") ->
 
 
 def aqi_to_category(aqi: float) -> str | None:
-    """Map an AQI number to its CPCB category (float-safe boundaries)."""
+    """Map an AQI value to its CPCB category."""
     if pd.isna(aqi):
         return None
     if aqi <= 50:
@@ -120,7 +94,7 @@ def aqi_to_category(aqi: float) -> str | None:
 
 
 def runs_of_true(mask: pd.Series) -> pd.DataFrame:
-    """Return start/end/length of each consecutive run where mask is True."""
+    """Start, end and length of each run of True values."""
     m = mask.to_numpy(dtype=bool)
     idx = mask.index
     out = []
@@ -136,7 +110,7 @@ def runs_of_true(mask: pd.Series) -> pd.DataFrame:
 
 
 def max_identical_run(s: pd.Series) -> tuple[int, object, object]:
-    """Longest run of the same non-missing value on consecutive calendar days."""
+    """Longest run of the same value on consecutive days."""
     best, best_val, best_start = 0, None, None
     prev, run, run_start = None, 0, None
     for date, v in s.items():
@@ -151,24 +125,17 @@ def max_identical_run(s: pd.Series) -> tuple[int, object, object]:
 
 
 def count_windows(observed: pd.Series, lookback: int) -> pd.Series:
-    """
-    For each calendar day t, True if days t-lookback+1 .. t are all observed
-    AND day t+1 (the target) is observed. Index = target date (t+1).
-    No imputation: any missing day breaks the window.
-    """
+    """Days whose previous N days are all observed."""
     obs = observed.astype(int)
     history_ok = obs.rolling(lookback, min_periods=lookback).sum() == lookback
     target_ok = observed.shift(-1, fill_value=False)
     valid = history_ok & target_ok
-    # re-index to the target date
     valid.index = valid.index + pd.Timedelta(days=1)
     return valid
 
 
-# ---------------------------------------------------------------------------
-# Main audit
-# ---------------------------------------------------------------------------
 def run_audit(input_path: Path, make_figures: bool = True) -> dict:
+    """Run every check and collect the findings."""
     if not input_path.exists():
         sys.exit(
             f"ERROR: {input_path} not found.\n"
@@ -176,7 +143,7 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
         )
 
     file_hash = sha256_of(input_path)
-    raw = pd.read_csv(input_path)  # read only; never written back
+    raw = pd.read_csv(input_path)
 
     findings: dict = {"input": input_path, "sha256": file_hash}
     findings["all_rows"] = len(raw)
@@ -194,13 +161,11 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     numeric_cols = pollutants + ["AQI"]
     findings["pollutants"] = pollutants
 
-    # ---- 1-2. counts and dates --------------------------------------------
     n = len(kol)
     first, last = kol["Date"].min(), kol["Date"].max()
     calendar = pd.date_range(first, last, freq="D")
     findings.update(n=n, first=first, last=last, calendar_days=len(calendar))
 
-    # ---- 3-4. missing values ----------------------------------------------
     miss = pd.DataFrame(
         {
             "column": kol.columns,
@@ -211,14 +176,12 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     miss["non_missing_count"] = n - miss["missing_count"]
     findings["missing"] = miss
 
-    # Pollutants never measured at all / heavily incomplete
     pol_miss = miss[miss["column"].isin(pollutants)].set_index("column")
     findings["never_measured"] = pol_miss.index[pol_miss["missing_count"] == n].tolist()
     findings["heavy_missing"] = pol_miss.index[
         pol_miss["missing_pct_of_rows"] > HEAVY_MISSING_PCT
     ].tolist()
 
-    # ---- 6. AQI distribution ----------------------------------------------
     aqi = kol["AQI"]
     findings["aqi_describe"] = aqi.describe(percentiles=[0.05, 0.25, 0.5, 0.75, 0.95])
     bucket_counts = (
@@ -237,12 +200,10 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     findings["bucket_tbl"] = bucket_tbl
     findings["days_above_alert"] = int((aqi > ALERT_THRESHOLD).sum())
 
-    # ---- 7. duplicates ----------------------------------------------------
     findings["dup_full_rows"] = int(kol.duplicated().sum())
     findings["dup_dates"] = int(kol["Date"].duplicated().sum())
 
-    # ---- 8. missing dates and gaps ----------------------------------------
-    daily = kol.set_index("Date").reindex(calendar)  # absent dates -> NaN rows
+    daily = kol.set_index("Date").reindex(calendar)
     row_absent = ~calendar.isin(kol["Date"])
     row_absent = pd.Series(row_absent, index=calendar)
     findings["absent_dates"] = int(row_absent.sum())
@@ -256,7 +217,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     obs_runs = runs_of_true(aqi_obs)
     findings["aqi_obs_runs"] = obs_runs
 
-    # Monthly coverage (calendar month x share of days with AQI observed)
     monthly = pd.DataFrame(
         {
             "calendar_days": aqi_obs.groupby(aqi_obs.index.to_period("M")).size(),
@@ -270,14 +230,12 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     monthly.index.name = "month"
     findings["monthly"] = monthly
 
-    # Per-column monthly coverage (for the heatmap)
     cov = (
         daily[numeric_cols].notna().groupby(daily.index.to_period("M")).mean() * 100
     )
     cov.index = cov.index.astype(str)
     findings["col_month_cov"] = cov
 
-    # Calendar-month (seasonal) summary across all years
     by_moy = pd.DataFrame(
         {
             "aqi_observed_days": aqi_obs.groupby(aqi_obs.index.month).sum(),
@@ -290,7 +248,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     by_moy.index.name = "month"
     findings["by_moy"] = by_moy
 
-    # ---- anomalies / plausibility -----------------------------------------
     anom_rows = []
     for c in numeric_cols:
         s = kol[c].dropna()
@@ -339,7 +296,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
         .assign(Date=lambda d: d["Date"].dt.date)
     )
 
-    # Day-to-day AQI change (only between consecutive observed days)
     diff = daily["AQI"].diff()
     findings["aqi_daily_change"] = diff.abs().describe(percentiles=[0.5, 0.9, 0.99])
     jumps = pd.DataFrame({"date": daily.index.date, "previous_day_AQI": daily["AQI"].shift(1),
@@ -347,7 +303,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     findings["top_jumps"] = jumps.dropna().reindex(
         jumps["change"].abs().dropna().sort_values(ascending=False).index[:5])
 
-    # ---- 9. next-day forecasting samples (no imputation) -------------------
     usable_pollutants = [
         p for p in pollutants
         if pol_miss.loc[p, "missing_pct_of_rows"] <= HEAVY_MISSING_PCT
@@ -368,7 +323,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
                  "samples_AQI_+_usable_pollutants"],
     )
 
-    # ---- 10. illustrative chronological split -----------------------------
     total_days = len(calendar)
     cut1 = calendar[int(total_days * SPLIT_FRACTIONS[0])]
     cut2 = calendar[int(total_days * (SPLIT_FRACTIONS[0] + SPLIT_FRACTIONS[1]))]
@@ -383,7 +337,6 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
                float(aqi_sel.median()), int((aqi_sel > ALERT_THRESHOLD).sum())]
         for L in (7, 14):
             w = windows[L]
-            # target date AND whole history window must lie inside the split
             hist_start_ok = (w.index - pd.Timedelta(days=L)) >= a
             wsel = (w.index >= a) & (w.index <= b) & hist_start_ok
             row.append(int(w[wsel].sum()))
@@ -397,27 +350,24 @@ def run_audit(input_path: Path, make_figures: bool = True) -> dict:
     findings["rows_after_lockdown"] = int((kol["Date"] >= LOCKDOWN_START).sum())
     findings["lockdown_in_split"] = [n for n, a, b in bounds if a <= LOCKDOWN_START <= b]
 
-    # Rows by year
     by_year = kol.groupby(kol["Date"].dt.year).agg(
         rows=("Date", "size"), aqi_observed=("AQI", "count"),
         median_aqi=("AQI", "median"))
     by_year.index.name = "year"
     findings["by_year"] = by_year
 
-    # ---- figures ----------------------------------------------------------
     findings["figures"] = make_plots(daily, findings) if make_figures else []
     return findings
 
 
-# ---------------------------------------------------------------------------
-# Figures (optional - skipped politely if matplotlib is not installed)
-# ---------------------------------------------------------------------------
+# Figure colours.
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 BLUE, RED_LINE = "#2a78d6", "#d03b3b"
 SEQ_BLUES = ["#fcfcfb", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 
 
 def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
+    """Draw the audit figures."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -437,7 +387,6 @@ def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
     })
     paths = []
 
-    # 1. AQI time series - gaps are left as breaks (NOT interpolated)
     fig, ax = plt.subplots(figsize=(11, 4.2))
     ax.plot(daily.index, daily["AQI"], color=BLUE, linewidth=1.4)
     ax.axhline(ALERT_THRESHOLD, color=RED_LINE, linewidth=1, linestyle="--")
@@ -459,7 +408,6 @@ def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
     plt.close(fig)
     paths.append(p)
 
-    # 2. AQI category distribution
     bt = f["bucket_tbl"]
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(bt["AQI_Bucket"], bt["days"], color=[BLUE] * 6 + ["#b5b4ae"], width=0.65)
@@ -475,7 +423,6 @@ def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
     plt.close(fig)
     paths.append(p)
 
-    # 3. Missing % per column
     m = f["missing"].query("column not in ['City', 'Date']").sort_values("missing_pct_of_rows")
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.barh(m["column"], m["missing_pct_of_rows"], color=BLUE, height=0.6)
@@ -491,7 +438,6 @@ def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
     plt.close(fig)
     paths.append(p)
 
-    # 4. Coverage heatmap: column x month
     cov = f["col_month_cov"].T
     cmap = LinearSegmentedColormap.from_list("seq_blue", SEQ_BLUES)
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -515,10 +461,8 @@ def make_plots(daily: pd.DataFrame, f: dict) -> list[Path]:
     return paths
 
 
-# ---------------------------------------------------------------------------
-# Report writer
-# ---------------------------------------------------------------------------
 def write_report(f: dict) -> None:
+    """Write the audit report."""
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     rel = lambda p: Path(p).resolve().relative_to(PROJECT_ROOT).as_posix()
     d = f["aqi_describe"]
@@ -725,8 +669,8 @@ def write_report(f: dict) -> None:
     REPORT_PATH.write_text("\n".join(L), encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 def print_summary(f: dict) -> None:
+    """Print a short audit summary."""
     print(f"Raw file        : {f['input']}")
     print(f"SHA-256         : {f['sha256']}")
     print(f"Kolkata rows    : {f['n']}")
@@ -744,6 +688,7 @@ def print_summary(f: dict) -> None:
 
 
 def main() -> None:
+    """Run the audit from the command line."""
     parser = argparse.ArgumentParser(description="Audit the Kolkata subset of city_day.csv")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT,
                         help="path to city_day.csv (default: data/raw/city_day.csv)")

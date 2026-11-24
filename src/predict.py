@@ -1,15 +1,4 @@
-"""
-Use the trained LSTM to forecast AQI for one day and raise an alert if needed.
-
-Two modes:
-  * no date given  -> forecast the day AFTER the last date in the dataset
-                      (2020-07-02). There is no actual value to compare with.
-  * --date YYYY-MM-DD -> forecast that date from the 14 days before it, and show
-                      the real AQI next to it if the dataset has it.
-
-Note: the dataset ends on 2020-07-01, so this is a demonstration on historical
-data, not a live forecast for today.
-"""
+"""Uses the trained LSTM to forecast one day's AQI and raise an alert if needed."""
 
 from __future__ import annotations
 
@@ -22,6 +11,7 @@ from src.preprocessing import StandardScaler, load_processed
 
 
 def forecast(date: str | None = None, device_name: str = "cpu") -> dict:
+    """Forecast the AQI for one date with every seed."""
     import json
 
     import torch
@@ -33,7 +23,7 @@ def forecast(date: str | None = None, device_name: str = "cpu") -> dict:
         raise FileNotFoundError("No trained models found. Run `python main.py train` first.")
     variant = json.loads(config.SELECTED_JSON.read_text())["selected_variant"]
     device = pick_device(device_name)
-    models = load_variant(variant, device)          # one model per seed
+    models = load_variant(variant, device)
     ckpt = models[0][1]
     scaler = StandardScaler(**ckpt["scaler"])
     lookback = ckpt["lookback"]
@@ -42,7 +32,7 @@ def forecast(date: str | None = None, device_name: str = "cpu") -> dict:
     last_date = clean["Date"].max()
     target = pd.Timestamp(date) if date else last_date + pd.Timedelta(days=1)
 
-    history = clean[clean["Date"] < target].tail(lookback)  # strictly BEFORE the target date
+    history = clean[clean["Date"] < target].tail(lookback)
     expected_start = target - pd.Timedelta(days=lookback)
     if len(history) < lookback or history["Date"].iloc[0] != expected_start:
         raise ValueError(
@@ -58,7 +48,7 @@ def forecast(date: str | None = None, device_name: str = "cpu") -> dict:
             z = model(torch.from_numpy(x).to(device)).cpu().numpy()
         per_seed.append(float(decode_target(z, today, ck["target_mode"],
                                             (ck["target_mean"], ck["target_std"]))[0]))
-    pred = float(np.mean(per_seed))   # average of the 5 runs
+    pred = float(np.mean(per_seed))
 
     actual_row = clean[clean["Date"] == target]
     actual = float(actual_row[config.TARGET].iloc[0]) if len(actual_row) else None
@@ -79,6 +69,7 @@ def forecast(date: str | None = None, device_name: str = "cpu") -> dict:
 
 
 def print_forecast(r: dict) -> None:
+    """Print the forecast and alert."""
     print("=" * 60)
     print(f" Kolkata next-day AQI forecast for {r['target_date']}")
     print("=" * 60)

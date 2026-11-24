@@ -1,37 +1,4 @@
-"""
-Model comparison: which forecaster works best, and does weather help?
-
-Every model forecasts the same thing as the main LSTM (tomorrow's AQI from the
-previous 14 days), for the same days, with the same date split.
-
-  Feature sets:
-    "pollution"          past AQI, 11 pollutants, day of year (as in the main LSTM)
-    "pollution+weather"  the same plus 13 daily weather inputs (Open-Meteo)
-
-  Forecasters:
-    Persistence      tomorrow = today (the baseline every model must beat)
-    Linear (ridge)   linear regression with a penalty on large weights
-    Random forest    average of many decision trees
-    XGBoost          gradient-boosted decision trees
-    GRU, LSTM        recurrent neural networks reading the 14 days in order
-
-Rules (the same as the rest of the project):
-  1. Each forecaster has a small, fixed list of settings in config.py, written
-     down before any comparison was run.
-  2. For every forecaster and feature set, the setting with the lowest mean
-     VALIDATION MAE is chosen. Models with randomness are trained with 5 seeds
-     and their forecasts averaged. The test period is not used here.
-  3. Only after every choice is saved are the chosen models trained again
-     (same seeds, so the same models) and asked for TEST forecasts. The test
-     period is scored once.
-  4. Inputs only come from days BEFORE the forecast day. The weather of the
-     forecast day itself is never used.
-
-Run:  python main.py compare               (NVIDIA GPU if available, else CPU)
-      python main.py compare --device cpu  (force the CPU)
-Every model runs on the chosen device: GRU and LSTM through PyTorch, XGBoost and
-the random forest through XGBoost's CUDA mode, ridge regression through PyTorch.
-"""
+"""Model comparison on Kaggle data: ridge, random forest, XGBoost, GRU and LSTM, with and without weather."""
 
 from __future__ import annotations
 
@@ -49,21 +16,19 @@ from src.evaluate import (BLUE, INK2, ORANGE, alert_metrics, block_bootstrap_mae
 from src.preprocessing import StandardScaler, feature_columns, load_processed, run_preprocessing
 from src.weather import add_weather, load_weather
 
+# Model families and settings for the comparison.
 FAMILIES = ["Linear (ridge)", "Random forest", "XGBoost", "GRU", "LSTM"]
 NEURAL = ("GRU", "LSTM")
 FEATURE_SETS = {"pollution": False, "pollution+weather": True}
 
 
-# ---------------------------------------------------------------------------
-# Data
-# ---------------------------------------------------------------------------
 def feature_set_columns(with_weather: bool) -> list[str]:
     """Input columns for a feature set, in a fixed order."""
     return feature_columns() + (list(config.WEATHER_FEATURES) if with_weather else [])
 
 
 def build_windows(with_weather: bool) -> tuple[Windows, StandardScaler]:
-    """14-day samples for one feature set; the scaler is fitted on training rows only."""
+    """Build 14-day samples for a feature set with a training-only scaler."""
     if not config.PROCESSED_CSV.exists():
         run_preprocessing(verbose=False)
     clean = load_processed()
@@ -74,28 +39,19 @@ def build_windows(with_weather: bool) -> tuple[Windows, StandardScaler]:
 
 
 def tabular_features(X: np.ndarray, recent: int = config.TABULAR_RECENT_DAYS) -> np.ndarray:
-    """
-    The non-neural models need one flat row per sample instead of a 14-day grid.
-    Each row holds:
-      * every input on the last day before the forecast ("today"),
-      * AQI on each of the last `recent` days (how pollution has been moving),
-      * the average of every input over the last `recent` days.
-    All of it comes from the window, so it is still only past information.
-    """
+    """Flatten each 14-day window into one row for non-neural models."""
     aqi = feature_columns().index(config.TARGET)
     return np.hstack([X[:, -1, :], X[:, -recent:, aqi], X[:, -recent:, :].mean(axis=1)])
 
 
 def tabular_feature_names(columns: list[str], recent: int = config.TABULAR_RECENT_DAYS) -> list[str]:
-    """Names matching tabular_features(), used for the XGBoost importance table."""
+    """Names of the flattened features, for importance tables."""
     lags = [f"AQI t-{recent - 1 - i}" for i in range(recent)]
     return [f"today:{c}" for c in columns] + lags + [f"mean{recent}:{c}" for c in columns]
 
 
-# ---------------------------------------------------------------------------
-# Candidate settings (fixed in config.py before running)
-# ---------------------------------------------------------------------------
 def candidates(family: str) -> list[dict]:
+    """Candidate settings for a model family."""
     if family == "Linear (ridge)":
         return [{"name": f"{m}, alpha={a}", "target_mode": m, "alpha": a}
                 for m in config.TABULAR_TARGET_MODES for a in config.RIDGE_ALPHAS]
@@ -112,15 +68,12 @@ def candidates(family: str) -> list[dict]:
 
 
 def seeds_for(family: str) -> list[int]:
-    """Ridge regression has no randomness, so one run is enough."""
+    """Seeds for a model family (one for ridge, several otherwise)."""
     return [config.SEED] if family == "Linear (ridge)" else list(config.SEEDS)
 
 
-# ---------------------------------------------------------------------------
-# Fitting
-# ---------------------------------------------------------------------------
 def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
-    """Same training loop as src/train.py (Adam, early stopping on validation loss)."""
+    """Train a GRU or LSTM with Adam and early stopping."""
     import torch
     from torch import nn
 
@@ -173,16 +126,14 @@ def _train_sequence(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
 
 
 class TorchRidge:
-    """
-    Ridge regression solved in closed form with PyTorch, so it runs on the GPU:
-        w = (X'X + alpha*I)^-1 X'y   on centred X and y; intercept = mean of y.
-    The intercept is not penalised, exactly like scikit-learn's Ridge.
-    """
+    """Ridge regression solved in closed form with PyTorch, so it runs on the GPU."""
 
     def __init__(self, alpha: float, device="cpu"):
+        """Store the penalty and device."""
         self.alpha, self.device = alpha, device
 
     def fit(self, X, y):
+        """Fit the ridge weights in closed form."""
         import torch
         X = torch.as_tensor(X, dtype=torch.float64, device=self.device)
         y = torch.as_tensor(y, dtype=torch.float64, device=self.device)
@@ -193,23 +144,24 @@ class TorchRidge:
         return self
 
     def predict(self, X):
+        """Predict with the fitted weights."""
         import torch
         X = torch.as_tensor(X, dtype=torch.float64, device=self.device)
         return ((X - self.x_mean) @ self.coef + self.y_mean).cpu().numpy()
 
 
 def _xgb_device(device) -> str:
+    """Choose the XGBoost device string."""
     return "cuda" if str(device).startswith("cuda") else "cpu"
 
 
 def _fit_tabular(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
+    """Fit ridge, random forest or XGBoost on flattened features."""
     if family == "Linear (ridge)":
         model = TorchRidge(alpha=cand["alpha"], device=device).fit(X_tr, y_tr)
         return model, model.predict
     if family == "Random forest":
         from xgboost import XGBRegressor
-        # One round of RF_TREES trees grown side by side on random row samples and
-        # averaged (learning_rate 1, almost no penalty) = a random forest.
         model = XGBRegressor(n_estimators=1, num_parallel_tree=config.RF_TREES,
                              learning_rate=1.0, reg_lambda=1e-5,
                              max_depth=cand["max_depth"], min_child_weight=cand["min_child_weight"],
@@ -222,7 +174,6 @@ def _fit_tabular(family, cand, seed, X_tr, y_tr, X_va, y_va, device):
         model = XGBRegressor(**config.XGB_PARAMS, max_depth=cand["max_depth"], random_state=seed,
                              n_jobs=1, verbosity=0, early_stopping_rounds=config.XGB_EARLY_STOPPING,
                              device=_xgb_device(device))
-        # validation is used to decide when to stop adding trees (like early stopping for the nets)
         model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
         return model, lambda X: model.predict(X, iteration_range=(0, model.best_iteration + 1))
     raise ValueError(family)
@@ -233,15 +184,15 @@ def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str], dev
     windows, scaler = data
     w_tr, w_va = windows.subset("train"), windows.subset("val")
     mode = cand["target_mode"]
-    stats = target_stats(w_tr, mode, scaler)                # learned from training samples only
+    stats = target_stats(w_tr, mode, scaler)
     y_tr = encode_target(w_tr.y_true, w_tr.last_aqi, mode, stats)
     y_va = encode_target(w_va.y_true, w_va.last_aqi, mode, stats)
 
     if family in NEURAL:
-        inputs = lambda w: w.X                               # noqa: E731
+        inputs = lambda w: w.X
         model, predict = _train_sequence(family, cand, seed, w_tr.X, y_tr, w_va.X, y_va, device)
     else:
-        inputs = lambda w: tabular_features(w.X)             # noqa: E731
+        inputs = lambda w: tabular_features(w.X)
         model, predict = _fit_tabular(family, cand, seed, inputs(w_tr), y_tr, inputs(w_va), y_va,
                                       device)
 
@@ -253,17 +204,15 @@ def fit_predict(family: str, cand: dict, seed: int, data, splits: list[str], dev
 
 
 def _pick_device(name: str):
-    """'cpu' unless asked otherwise; falls back to CPU if CUDA is not usable."""
+    """Pick the device, falling back to CPU if CUDA is not usable."""
     if name == "cpu":
         return "cpu"
     from src.model import pick_device
     return pick_device(name)
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
+    """Run the whole comparison and write its report."""
     t0 = time.time()
     device = _pick_device(device_name)
     data = {fs: build_windows(w) for fs, w in FEATURE_SETS.items()}
@@ -278,7 +227,6 @@ def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> di
         print(f"Device: {device} (all five forecasters)")
         print(f"Phase 1 - choosing settings on VALIDATION ({n_models} models)...\n")
 
-    # ---- Phase 1: every candidate, validation only ------------------------
     rows = []
     for fs, d in data.items():
         y_val = d[0].subset("val").y_true
@@ -311,7 +259,6 @@ def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> di
                            .idxmin()].reset_index(drop=True)
     overall = selected.loc[selected["val_MAE_mean"].idxmin()]
 
-    # Save every choice BEFORE any test forecast is made.
     with open(config.COMPARISON_DIR / "selected.json", "w") as f:
         json.dump({
             "rule": "per forecaster and feature set: lowest mean validation MAE over seeds; "
@@ -324,7 +271,6 @@ def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> di
             "decided_at": datetime.now().isoformat(timespec="seconds"),
         }, f, indent=2)
 
-    # ---- Phase 2: chosen settings only, test scored once -------------------
     if verbose:
         print("\nPhase 2 - settings fixed; re-training the chosen models for the TEST forecasts...")
     final = {}
@@ -346,10 +292,8 @@ def run_comparison(device_name: str = config.DEVICE, verbose: bool = True) -> di
     return result
 
 
-# ---------------------------------------------------------------------------
-# Scoring and report
-# ---------------------------------------------------------------------------
 def _score_and_report(data, selected, overall, final, seconds: float, device: str) -> dict:
+    """Score the chosen models on the test period and collect results."""
     w_val = data["pollution"][0].subset("val")
     w_te = data["pollution"][0].subset("test")
     y, persistence = w_te.y_true, w_te.last_aqi.copy()
@@ -405,7 +349,7 @@ def _score_and_report(data, selected, overall, final, seconds: float, device: st
 
 
 def _xgb_importance(final) -> pd.DataFrame:
-    """XGBoost (with weather): share of total gain per input variable, averaged over seeds."""
+    """Share of XGBoost gain per input variable, averaged over seeds."""
     models = final[("pollution+weather", "XGBoost")]["models"]
     names = tabular_feature_names(feature_set_columns(True))
     gain = np.mean([m.feature_importances_ for m in models], axis=0)
@@ -420,6 +364,7 @@ def _xgb_importance(final) -> pd.DataFrame:
 
 
 def _verdict(lo: float, hi: float, better: str, worse: str) -> str:
+    """Describe a 95% interval as better, worse or no clear difference."""
     if hi < 0:
         return better
     if lo > 0:
@@ -428,12 +373,14 @@ def _verdict(lo: float, hi: float, better: str, worse: str) -> str:
 
 
 def _md(rows: list[list], header: list[str]) -> str:
+    """Format rows as a Markdown table."""
     out = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
     return "\n".join(out)
 
 
 def _write_report(r: dict, fig) -> None:
+    """Write the comparison report."""
     test, weather, selected, overall = r["test"], r["weather"], r["selected"], r["overall"]
     pers = test[test["family"] == "Persistence"].iloc[0]
     ov = test[(test["feature_set"] == overall["feature_set"]) &
@@ -563,6 +510,7 @@ def _write_report(r: dict, fig) -> None:
 
 
 def _plot(test: pd.DataFrame):
+    """Draw the comparison figure."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -572,7 +520,7 @@ def _plot(test: pd.DataFrame):
     pers = float(test.loc[test["family"] == "Persistence", "MAE"].iloc[0])
     fams = FAMILIES[::-1]
     yy = np.arange(len(fams))
-    get = lambda fs: [float(test[(test["family"] == f) & (test["feature_set"] == fs)]["MAE"].iloc[0])  # noqa: E731
+    get = lambda fs: [float(test[(test["family"] == f) & (test["feature_set"] == fs)]["MAE"].iloc[0])
                       for f in fams]
     fig, ax = plt.subplots(figsize=(8, 4.6))
     ax.barh(yy + 0.2, get("pollution"), height=0.38, color=BLUE, label="pollution only")
@@ -595,6 +543,7 @@ def _plot(test: pd.DataFrame):
 
 
 def _print_summary(r: dict) -> None:
+    """Print a short summary of the comparison."""
     t = r["test"]
     print("\nTEST period (scored once):")
     print(f"  {'forecaster':<15} {'feature set':<18} {'MAE':>6} {'R2':>6} {'alert F1':>9}   "

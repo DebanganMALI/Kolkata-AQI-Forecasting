@@ -1,25 +1,4 @@
-"""
-Live GRU: the model behind the website's daily "tomorrow" forecast.
-
-The live CPCB feed (data.gov.in, "Real time Air Quality Index from various
-locations") gives pollutant sub-indices for the 7 Kolkata stations, not the
-raw concentrations the main models were trained on. So the live model uses
-only inputs the daily job can really get:
-
-  * city AQI of the last 14 days
-  * the 13 Open-Meteo weather inputs of the same days
-  * day of year (sine, cosine)
-
-It is trained, chosen and tested exactly like the main experiments:
-train 2018-10-01..2023-12-31, validation 2024, test 2025-01-01..2026-10-31,
-choice of target mode on validation only, test scored once against
-persistence with a 95% block-bootstrap interval.
-
-The chosen seeds are exported as plain numbers (models/live/gru_live.npz), so
-the daily job runs the GRU with NumPy and needs no PyTorch.
-
-    python main.py live-train
-"""
+"""Trains the live GRU (city AQI and weather inputs) used for the website's daily forecasts."""
 
 from __future__ import annotations
 
@@ -37,6 +16,7 @@ from src.evaluate import alert_metrics, block_bootstrap_mae_diff
 from src.model import AQIGRU, pick_device
 from src.train import set_seed
 
+# Inputs, model size, seeds and output files.
 FEATURES = ["AQI", *config.WEATHER_FEATURES, "doy_sin", "doy_cos"]
 HIDDEN = 32
 MODES = ["level", "change"]
@@ -49,12 +29,13 @@ SITE_JSON = config.PROJECT_ROOT / "web" / "data" / "live_model.json"
 
 
 def load_table() -> pd.DataFrame:
+    """Load the extended table with the live model's inputs."""
     t = pd.read_csv(config.V2_TABLE_CSV, parse_dates=["Date"])
     return t[["Date", "AQI_target", *FEATURES, "split"]].reset_index(drop=True)
 
 
 def make_windows(t: pd.DataFrame, mean: np.ndarray, std: np.ndarray):
-    """Inputs: days d-13..d (scaled). Target: AQI on d+1, never filled in."""
+    """Build 14-day windows with next-day targets that are never filled."""
     X = ((t[FEATURES].to_numpy(float) - mean) / std).astype(np.float32)
     y = t["AQI_target"].to_numpy(float)
     today = t["AQI"].to_numpy(float)
@@ -66,20 +47,23 @@ def make_windows(t: pd.DataFrame, mean: np.ndarray, std: np.ndarray):
         xs.append(X[d - config.LOOKBACK + 1: d + 1])
         ys.append(y[d + 1])
         last.append(today[d])
-        sp.append(split[d + 1])                 # a sample belongs to its target's split
+        sp.append(split[d + 1])
         dates.append(t["Date"].iloc[d + 1])
     return np.stack(xs), np.array(ys), np.array(last), np.array(sp), pd.to_datetime(dates)
 
 
 def encode(y, last, mode, s):
+    """Scale the target for training."""
     return (y - s["mean"]) / s["std"] if mode == "level" else (y - last) / s["dstd"]
 
 
 def decode(z, last, mode, s):
+    """Turn a network output back into AQI."""
     return z * s["std"] + s["mean"] if mode == "level" else last + z * s["dstd"]
 
 
 def train_one(mode, seed, X, z, tr, va, device):
+    """Train one GRU with early stopping on validation."""
     set_seed(seed)
     model = AQIGRU(len(FEATURES), hidden_size=HIDDEN, num_layers=1).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE,
@@ -114,15 +98,16 @@ def train_one(mode, seed, X, z, tr, va, device):
 
 
 def predict(model, X, device) -> np.ndarray:
+    """Run a trained GRU on a batch of windows."""
     with torch.no_grad():
         return model(torch.tensor(X, device=device)).cpu().numpy().astype(float)
 
 
 def numpy_gru(w: dict, x: np.ndarray) -> np.ndarray:
-    """Same forward pass as torch.nn.GRU (1 layer) + linear head. x: (batch, days, features)."""
+    """The same GRU forward pass in NumPy, for running without PyTorch."""
     H = w["weight_hh"].shape[1]
     h = np.zeros((x.shape[0], H))
-    sig = lambda a: 1.0 / (1.0 + np.exp(-a))  # noqa: E731
+    sig = lambda a: 1.0 / (1.0 + np.exp(-a))
     for step in range(x.shape[1]):
         gi = x[:, step, :] @ w["weight_ih"].T + w["bias_ih"]
         gh = h @ w["weight_hh"].T + w["bias_hh"]
@@ -134,6 +119,7 @@ def numpy_gru(w: dict, x: np.ndarray) -> np.ndarray:
 
 
 def export_weights(model) -> dict:
+    """Copy a trained GRU's weights into NumPy arrays."""
     s = {k: v.detach().cpu().numpy().astype(float) for k, v in model.state_dict().items()}
     return {"weight_ih": s["gru.weight_ih_l0"], "weight_hh": s["gru.weight_hh_l0"],
             "bias_ih": s["gru.bias_ih_l0"], "bias_hh": s["gru.bias_hh_l0"],
@@ -141,6 +127,7 @@ def export_weights(model) -> dict:
 
 
 def run_live_training(device_name: str = config.DEVICE) -> dict:
+    """Train, choose on validation, test once and save the live GRU."""
     device = pick_device(device_name)
     t = load_table()
     train_rows = t["split"] == "train"
@@ -171,11 +158,9 @@ def run_live_training(device_name: str = config.DEVICE) -> dict:
     def avg_pred(mask):
         return np.mean([decode(predict(m, X[mask], device), last[mask], mode, s) for m in models], axis=0)
 
-    # 80% range from validation errors only
     val_err = y[va] - avg_pred(va)
     q_lo, q_hi = (float(v) for v in np.percentile(val_err, [10, 90]))
 
-    # test, scored once
     p, yt, pers = avg_pred(te), y[te], last[te]
     mae, pmae = float(np.mean(np.abs(p - yt))), float(np.mean(np.abs(pers - yt)))
     rmse = float(np.sqrt(np.mean((p - yt) ** 2)))
@@ -184,7 +169,6 @@ def run_live_training(device_name: str = config.DEVICE) -> dict:
     cover = float(np.mean((yt >= p + q_lo) & (yt <= p + q_hi)))
     f1, pf1 = alert_metrics(yt, p)["F1"], alert_metrics(yt, pers)["F1"]
 
-    # check the NumPy copy gives the same forecasts as PyTorch
     exported = [export_weights(m) for m in models]
     np_pred = np.mean([decode(numpy_gru(w, X[te].astype(float)), last[te], mode, s) for w in exported], axis=0)
     max_gap = float(np.max(np.abs(np_pred - p)))

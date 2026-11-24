@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- Single-page website: Kolkata painting whose sky follows the AQI, tested days, live government AQI and future outlook. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -15,7 +16,7 @@
   --bg:#13110e; --panel:#1c1915; --panel2:#24201b; --ink:#f3ede2; --ink2:#c2b8a8; --ink3:#8a8174; --line:#332e27;
   --accent:#f0a04b; --gru:#f0a04b; --ens:#82a8ff; --pers:#8a8174; --actual:#f3ede2; --band:rgba(240,160,75,.16);
   --good:#3fae5a; --sat:#9ccc4a; --mod:#f2c42c; --poor:#f08a2e; --vpoor:#e0483a; --sev:#9e2121;
-  --f:0;                       /* 0 = clean air, 1 = very polluted; set from the chosen day */
+  --f:0;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -26,7 +27,6 @@ body{margin:0;background:transparent;color:var(--ink);font:16px/1.55 Inter,syste
 h2{font:600 clamp(24px,3.2vw,34px)/1.12 Fraunces,Georgia,serif;margin:10px 0 8px;letter-spacing:-.01em}
 .sub{color:var(--ink2);margin:0 0 24px;max-width:900px}
 
-/* ---------------- hero scene ---------------- */
 .hero{position:relative;min-height:100svh;display:flex;flex-direction:column;justify-content:flex-end}
 .scene{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#2a2620}
 .stage{position:absolute;top:50%;left:50%;width:max(100vw,177.78vh);height:max(100vh,56.25vw);transform:translate(-50%,-50%);overflow:hidden}
@@ -92,7 +92,6 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   .topbar{padding:14px 0}.toplink{display:none}
 }
 
-/* ---------------- sections ---------------- */
 section{padding:64px 0;border-top:1px solid rgba(255,255,255,.07)}
 .grid{display:grid;gap:14px}
 .g3{grid-template-columns:1.05fr 1.2fr 1fr}.gwide{grid-template-columns:minmax(0,2.2fr) minmax(320px,1fr)}
@@ -274,6 +273,7 @@ body.future .disc{display:block}
 </div></footer>
 
 <script>
+// CPCB AQI categories and small formatting helpers.
 const CATS=[[50,"Good","--good"],[100,"Satisfactory","--sat"],[200,"Moderate","--mod"],[300,"Poor","--poor"],[400,"Very Poor","--vpoor"],[1e9,"Severe","--sev"]];
 const root=document.documentElement;
 const css=v=>getComputedStyle(root).getPropertyValue(v).trim();
@@ -287,12 +287,14 @@ const mae=(a,b)=>a.reduce((s,_,i)=>s+Math.abs(a[i]-b[i]),0)/a.length;
 const $=id=>document.getElementById(id);
 const COMPASS=["N","NE","E","SE","S","SW","W","NW"];
 
+// Page state: live reading, test days, outlook days, mode and charts.
 let NOW=null,days=[],fut=[],O=null,mode="test",idx=0,fidx=0,chart,fchart,view="all";
 const list=()=>mode==="test"?days:fut;
 
-/* air -> scene: 0 at AQI 50 or below, 1 at AQI 260 or above */
+// Map the chosen day's AQI to the scene's haze, dimming and sun.
 function setAir(aqi){root.style.setProperty("--f",Math.min(1,Math.max(0,(aqi-50)/210)).toFixed(3))}
 
+// Switch between tested days and the future outlook.
 function setMode(m){
   mode=m;document.body.classList.toggle("future",m==="future");
   $("mTest").classList.toggle("on",m==="test");$("mFut").classList.toggle("on",m==="future");
@@ -301,6 +303,7 @@ function setMode(m){
   $("sM").textContent=m==="test"?"Drag through 669 tested days and watch the sky change":"Drag through the outlook and watch the seasons turn";
 }
 
+// Select a day in the current mode and update the page.
 function show(i,opts={}){
   const L=list();i=Math.max(0,Math.min(L.length-1,i));
   if(mode==="test")idx=i;else fidx=i;
@@ -308,6 +311,7 @@ function show(i,opts={}){
   mode==="test"?showTest(d,opts):showFuture(d);
 }
 
+// Show a tested day: actual AQI, forecasts and that day's weather.
 function showTest(d,opts){
   setAir(d.actual);
   $("hAqi").innerHTML=`<small>Actual AQI</small>${n0(d.actual)}`;
@@ -337,6 +341,7 @@ function showTest(d,opts){
   draw();drawF();
 }
 
+// Show a recent real day: official AQI vs the day-ahead forecast.
 function showReal(d){
   setAir(d.aqi);
   $("hAqi").innerHTML=`<small>Official AQI</small>${n0(d.aqi)}`;
@@ -355,12 +360,14 @@ function showReal(d){
   $("n1").textContent="White marker: official AQI. Orange marker: day-ahead forecast.";
   pastYears(d);weather(d,true);drawF();
 }
+// Draw the same calendar date's AQI in past years.
 function pastYears(d){
   const ys=Object.entries(d.past||{});const mx=Math.max(300,...ys.map(([,v])=>v));
   $("dPred").innerHTML=ys.length?`</dl><div class="years">${ys.map(([y,v])=>`<span class="muted">${y}</span><i style="width:${v/mx*100}%;background:${css(cat(v)[2])}"></i><b>${v}</b>`).join("")}</div><dl>`:"<dt>No earlier years</dt><dd></dd>";
   const vals=ys.map(([,v])=>v).sort((a,b)=>a-b);
   $("n2").textContent=vals.length?`Official CPCB AQI on ${fmt(d.date,{day:"numeric",month:"long"})}. Median across years: ${vals[Math.floor(vals.length/2)]}.`:"";
 }
+// Show an outlook day with its range and disclaimer.
 function showFuture(d){
   if(d.real)return showReal(d);
   setAir(d.aqi);
@@ -387,6 +394,7 @@ function showFuture(d){
   drawF();
 }
 
+// Fill the weather card for the chosen day.
 function weather(d,typical){
   const dir=d.wind_dir!=null?COMPASS[Math.round(d.wind_dir/45)%8]:null;
   $("dWx").innerHTML=`
@@ -396,7 +404,7 @@ function weather(d,typical){
     <div><b>${d.wind_mean?.toFixed(1)} km/h${dir?` <span class="arrow" style="transform:rotate(${d.wind_dir+180}deg)">&uarr;</span>`:""}</b><span>${dir?`Wind from ${dir}`:"Wind (average)"}</span></div>`;
 }
 
-/* ---------- test section ---------- */
+// Fill the score cards for the 669 test days.
 function cards(){
   const y=days.map(d=>d.actual),g=days.map(d=>d.gru),e=days.map(d=>d.ensemble),p=days.map(d=>d.persistence);
   const m=y.reduce((a,b)=>a+b)/y.length;
@@ -407,6 +415,7 @@ function cards(){
     ["Within 20 points",Math.round(y.filter((v,i)=>Math.abs(v-g[i])<=20).length/y.length*100)+"%","of days","GRU forecast vs actual"]];
   $("cards").innerHTML=C.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]} <small>${c[2]}</small></div><div class="note">${c[3]}</div></div>`).join("");
 }
+// Fill the score cards for the future outlook.
 function fcards(){
   const B=O.buckets,b=(h)=>B.find(x=>x.from<=h&&h<=x.to);
   const F2=fut.filter(d=>!d.real);const winter=F2.filter(d=>/-(12|01)-/.test(d.date)),monsoon=F2.filter(d=>/-(07|08)-/.test(d.date));
@@ -418,11 +427,13 @@ function fcards(){
       :["Tested error, 1 to 4 months ahead",`±${b(90).mae}`,"AQI",`Seasonal average alone: ±${b(90).seasonal_avg_mae}`]];
   $("fcards").innerHTML=C.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]} <small>${c[2]}</small></div><div class="note">${c[3]}</div></div>`).join("");
 }
+// Pick the test days shown in the chart for the selected range.
 function subset(){
   if(view==="all")return days.map((d,i)=>[d,i]);
   if(view==="2025"||view==="2026")return days.map((d,i)=>[d,i]).filter(([d])=>d.date.startsWith(view));
   return days.map((d,i)=>[d,i]).slice(Math.max(0,idx-30),idx+31);
 }
+// Shared chart settings: tooltips, axes and click-to-select.
 const baseOpts=(onPick)=>({responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},
   plugins:{legend:{display:false},tooltip:{filter:i=>!/low$/.test(i.dataset.label),
     callbacks:{title:t=>short(t[0].label),
@@ -430,11 +441,13 @@ const baseOpts=(onPick)=>({responsive:true,maintainAspectRatio:false,animation:f
   onClick:(e,els,ch)=>{if(els.length)onPick(ch.data.labels[els[0].index])},
   scales:{x:{ticks:{color:css("--ink3"),maxTicksLimit:8,callback:function(v){return fmt(this.getLabelForValue(v),{month:"short",year:"2-digit"})}},grid:{display:false}},
     y:{beginAtZero:true,ticks:{color:css("--ink3")},grid:{color:css("--line")},title:{display:true,text:"AQI",color:css("--ink3")}}}});
+// Open a date from the picker, chart or table in the right mode.
 function pickDate(date){
   const ti=days.findIndex(d=>d.date===date),fi=fut.findIndex(d=>d.date===date);
   if(fi>=0){if(mode!=="future")setMode("future");show(fi)}else if(ti>=0){if(mode!=="test")setMode("test");show(ti,{fromChart:true})}
   $("hero").scrollIntoView();
 }
+// Draw the test-period chart.
 function draw(){
   const s=subset(),D=s.map(x=>x[0]);
   const ds=[
@@ -448,6 +461,7 @@ function draw(){
   if(chart){chart.data.labels=D.map(d=>d.date);chart.data.datasets=ds;chart.update("none");return}
   chart=new Chart($("chart"),{type:"line",data:{labels:D.map(d=>d.date),datasets:ds},options:baseOpts(pickDate)});
 }
+// Draw the year-ahead chart: real AQI, then the outlook with its range.
 function drawF(){
   const labels=[...days.map(d=>d.date),...fut.map(d=>d.date)],n=days.length;
   const sel=mode==="future"?n+fidx:-1;
@@ -466,24 +480,28 @@ function drawF(){
   if(fchart){fchart.data.datasets=ds;fchart.update("none");return}
   fchart=new Chart($("fchart"),{type:"line",data:{labels,datasets:ds},options:baseOpts(pickDate),plugins:[edge]});
 }
+// Draw the chart range buttons.
 function setRanges(){
   const near=!["all","2025","2026"].includes(view);
   const R=[["all","All 22 months"],["2025","2025"],["2026","2026"],["near","Around chosen day"]];
   $("ranges").innerHTML=R.map(r=>`<button data-r="${r[0]}" class="${view===r[0]||(r[0]==="near"&&near)?"on":""}" style="background:${view===r[0]||(r[0]==="near"&&near)?"":"var(--panel2)"}">${r[1]}</button>`).join("");
   document.querySelectorAll("#ranges button").forEach(b=>b.onclick=()=>{view=b.dataset.r==="near"?days[idx].date:b.dataset.r;setRanges();draw()});
 }
+// Fill the table of high-pollution days.
 function highTable(){
   $("high").innerHTML=`<thead><tr><th>Date</th><th>Actual</th><th>GRU</th><th>Ensemble</th><th>Persistence</th></tr></thead><tbody>`+
     days.filter(d=>d.actual>200).map(d=>`<tr class="click" data-d="${d.date}"><td>${short(d.date)}</td><td>${n0(d.actual)}</td><td>${n0(d.gru)}</td><td>${n0(d.ensemble)}</td><td>${n0(d.persistence)}</td></tr>`).join("")+"</tbody>";
   document.querySelectorAll("#high tr.click").forEach(r=>r.onclick=()=>pickDate(r.dataset.d));
 }
 
+// Blur and darken the painting as the page scrolls.
 {let tick=false;const upd=()=>{root.style.setProperty("--s",Math.min(1,scrollY/(innerHeight*.6)).toFixed(3));tick=false};
  addEventListener("scroll",()=>{if(!tick){tick=true;requestAnimationFrame(upd)}},{passive:true});upd();}
+// Load the data files, then set up the page.
 (async()=>{
   const get=async p=>{try{const r=await fetch(p,{cache:"no-store"});return r.ok?r.json():null}catch(e){return null}};
   const [T,F,L,S]=await Promise.all([get("data/test.json"),get("data/outlook.json"),get("api/now"),get("data/now.json")]);
-  const N=(L&&L.aqi!=null)?L:S;          // live (Cloudflare function) first, else the last saved reading
+  const N=(L&&L.aqi!=null)?L:S;
   NOW=N&&N.aqi!=null&&Date.now()-new Date(N.fetched).getTime()<36*3600e3?N:null;
   if(NOW){
     const p=$("nowPill");p.style.display="";
@@ -502,7 +520,7 @@ function highTable(){
   cards();if(O)fcards();setRanges();highTable();
   const s=days.findIndex(d=>d.date==="2025-12-12");idx=s>=0?s:0;
   if(fut.length){
-    const today=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);      // date in India
+    const today=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
     let i=fut.findIndex(d=>d.date===today);
     if(i<0)i=fut.map(d=>!!d.real).lastIndexOf(true);
     fidx=Math.max(0,i);setMode("future");show(fidx);

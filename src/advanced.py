@@ -1,25 +1,4 @@
-"""
-Advanced deep-learning experiment:  python main.py advanced
-
-Same task, data, split and rules as the rest of the project (pollution inputs
-only, 14 days -> next-day AQI). It adds four things the main LSTM cannot show:
-
-  1. Attention LSTM  - which of the 14 past days does the network rely on?
-  2. TCN             - a convolutional sequence model (different family).
-  3. Transformer     - self-attention, the modern architecture, on small data.
-  4. Quantile attention LSTM - a forecast RANGE (10th-90th percentile) trained
-                       with the pinball loss, and a cautious alert from its upper end.
-  + Multi-horizon    - the chosen attention LSTM trained to forecast 1, 3 and 7
-                       days ahead, to see how error grows with distance.
-
-Rules:
-  * Candidate settings are fixed in config.py (ADVANCED_CANDIDATES) before running.
-  * Every candidate is trained with 5 seeds; the one with the best mean
-    VALIDATION score is chosen (MAE; pinball loss for the quantile model).
-  * Choices are saved to models/advanced/selected.json, and only then are the
-    already-trained chosen models asked for TEST forecasts, scored once.
-  * The 3- and 7-day models reuse the setting chosen for 1 day (no re-tuning).
-"""
+"""Advanced experiment on Kaggle data: attention LSTM, TCN, Transformer, forecast ranges and longer horizons."""
 
 from __future__ import annotations
 
@@ -41,13 +20,12 @@ from src.model import pick_device
 from src.preprocessing import StandardScaler, load_processed, run_preprocessing
 from src.train import set_seed
 
+# Quantile levels used for the forecast range.
 Q = np.asarray(config.QUANTILES)
 
 
-# ---------------------------------------------------------------------------
-# Building blocks
-# ---------------------------------------------------------------------------
 def make_model(arch: str, cand: dict, n_features: int) -> nn.Module:
+    """Build an advanced network from its name and settings."""
     if arch == "Attention LSTM":
         return AttentionLSTM(n_features, hidden_size=cand["hidden_size"])
     if arch == "Quantile attention LSTM":
@@ -60,7 +38,7 @@ def make_model(arch: str, cand: dict, n_features: int) -> nn.Module:
 
 
 def train_net(factory, seed, X_tr, y_tr, X_va, y_va, loss_fn, device) -> nn.Module:
-    """Adam + early stopping on validation loss, as in src/train.py."""
+    """Train a network with Adam and early stopping on validation loss."""
     set_seed(seed)
     model = factory().to(device)
     train_loader = to_loader(X_tr, y_tr, config.BATCH_SIZE, shuffle=True, seed=seed)
@@ -95,7 +73,7 @@ def train_net(factory, seed, X_tr, y_tr, X_va, y_va, loss_fn, device) -> nn.Modu
 
 
 def run_net(model, X, device):
-    """Network output (scaled) + attention weights when the model has them."""
+    """Run a network and return its outputs and attention weights."""
     with torch.no_grad():
         out = model(torch.from_numpy(X).to(device)).cpu().numpy()
     att = getattr(model, "last_attention", None)
@@ -103,25 +81,25 @@ def run_net(model, X, device):
 
 
 def decode(z, w, mode, stats, quantile: bool):
+    """Turn network outputs back into real AQI values."""
     last = w.last_aqi[:, None] if quantile else w.last_aqi
     return decode_target(z, last, mode, stats)
 
 
 def pinball_np(y, P) -> float:
+    """Average pinball loss of quantile forecasts in NumPy."""
     e = np.asarray(y, float)[:, None] - P
     return float(np.maximum(Q * e, (Q - 1) * e).mean())
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 def run_advanced(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
+    """Run the whole advanced experiment and write its report."""
     t0 = time.time()
     device = pick_device(device_name)
     if not config.PROCESSED_CSV.exists():
         run_preprocessing(verbose=False)
     clean = load_processed()
-    scaler = StandardScaler.from_json(config.SCALER_JSON)     # fitted on training rows only
+    scaler = StandardScaler.from_json(config.SCALER_JSON)
     windows = {h: make_windows(clean, scaler, horizon=h) for h in config.HORIZONS}
     w = windows[1]
     tr, va, te = w.subset("train"), w.subset("val"), w.subset("test")
@@ -131,7 +109,6 @@ def run_advanced(device_name: str = config.DEVICE, verbose: bool = True) -> dict
         print(f"Device: {device} | train {len(tr)} | val {len(va)} | test {len(te)} | features {nf}")
         print(f"Phase 1 - choosing settings on VALIDATION ({n_models} networks)...\n")
 
-    # ---- Phase 1: train every candidate, score on validation --------------
     rows, trained = [], {}
     for arch, cands in config.ADVANCED_CANDIDATES.items():
         quantile = arch.startswith("Quantile")
@@ -177,7 +154,6 @@ def run_advanced(device_name: str = config.DEVICE, verbose: bool = True) -> dict
                    "selected": chosen, "decided_at": datetime.now().isoformat(timespec="seconds")},
                   f, indent=2)
 
-    # ---- Phase 2: test forecasts from the chosen, already-trained models ---
     if verbose:
         print("\nPhase 2 - settings fixed; scoring the chosen models on TEST once...")
     test, attention = {}, {}
@@ -189,9 +165,8 @@ def run_advanced(device_name: str = config.DEVICE, verbose: bool = True) -> dict
                          for m in t["models"]], axis=0)
         test[arch] = {"pred": preds, "val_pred": val_p, **t}
         if outs[0][1] is not None:
-            attention[arch] = np.mean([o[1] for o in outs], axis=0)       # (samples, days)
+            attention[arch] = np.mean([o[1] for o in outs], axis=0)
 
-    # ---- Multi-horizon: chosen attention LSTM setting, 1 / 3 / 7 days ------
     horizon_rows = []
     base = trained[("Attention LSTM", chosen["Attention LSTM"]["candidate"])]
     for h in config.HORIZONS:
@@ -224,10 +199,8 @@ def run_advanced(device_name: str = config.DEVICE, verbose: bool = True) -> dict
     return r
 
 
-# ---------------------------------------------------------------------------
-# Scoring, report and figures
-# ---------------------------------------------------------------------------
 def _score(te, va, chosen, test, attention, horizons, device, seconds) -> dict:
+    """Score chosen models on the test period against persistence."""
     y, pers = te.y_true, te.last_aqi
     lock = pd.to_datetime(te.target_dates) >= pd.Timestamp(config.LOCKDOWN_START)
 
@@ -263,8 +236,8 @@ def _score(te, va, chosen, test, attention, horizons, device, seconds) -> dict:
         {"rule": f"Quantile upper ({int(Q[-1] * 100)}th pct) > 200", **alert_metrics(y, P[:, 2])},
     ])
 
-    att = attention["Attention LSTM"]                       # (samples, days), oldest day first
-    days_before = np.arange(att.shape[1], 0, -1)            # 14 ... 1 day(s) before the forecast day
+    att = attention["Attention LSTM"]
+    days_before = np.arange(att.shape[1], 0, -1)
     att_table = pd.DataFrame({"days_before": days_before, "all": att.mean(0),
                               "before": att[~lock].mean(0), "lockdown": att[lock].mean(0)})
 
@@ -287,15 +260,18 @@ def _score(te, va, chosen, test, attention, horizons, device, seconds) -> dict:
 
 
 def _md(rows, header) -> str:
+    """Format rows as a Markdown table."""
     out = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     return "\n".join(out + ["| " + " | ".join(str(c) for c in r) + " |" for r in rows])
 
 
 def _verdict(lo, hi) -> str:
+    """Describe a 95% interval as better, worse or no clear difference."""
     return "better than persistence" if hi < 0 else "worse than persistence" if lo > 0 else "no clear difference"
 
 
 def _write_report(r: dict) -> None:
+    """Write the advanced results report."""
     iv, att = r["intervals"], r["attention"]
     top = att.sort_values("all", ascending=False).head(3)
     flat = 100 / len(att)
@@ -379,6 +355,7 @@ def _write_report(r: dict) -> None:
 
 
 def _plots(te, P, att, horizons) -> list:
+    """Draw the advanced experiment figures."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -440,6 +417,7 @@ def _plots(te, P, att, horizons) -> list:
 
 
 def _print(r: dict) -> None:
+    """Print a short summary of the advanced results."""
     print("\nTEST period (scored once):")
     for _, t in r["table"].iterrows():
         extra = "" if t["model"] == "Persistence" else \

@@ -1,31 +1,4 @@
-"""
-Robustness and spike experiment:  python main.py robust
-
-Two questions the single test period could not answer:
-
-1. Does the model win in EVERY year, or only in 2025-2026?  -> walk-forward
-   evaluation: the whole procedure repeated four times, each round training
-   only on data before its validation year and testing on the year after it:
-       round   train            validation   test
-       1       2018-10 .. 2020  2021         2022
-       2       2018-10 .. 2021  2022         2023
-       3       2018-10 .. 2022  2023         2024
-       4       2018-10 .. 2023  2024         2025-01 .. 2026-10
-
-2. Can the weak point, sudden high-pollution days, be improved?
-   * Spike-weighted GRU: in the loss, each training day counts in proportion
-     to (its AQI / the average AQI) ** gamma, so polluted days matter more.
-     gamma is chosen per round on that round's validation year, by the error
-     on its most polluted 20% of days.
-   * Ensemble: the average of GRU, LSTM, Transformer and XGBoost.
-   * Alert probability: a GRU classifier that outputs the probability that
-     tomorrow's AQI is above 200; its alert threshold is set on validation.
-
-Model settings and feature sets are the ones already chosen on 2024 validation
-(models/extended/selected.json); nothing here is tuned on any test year.
-The 2025-2026 test period was already scored once by `extended`; round 4
-scores it again, and the report says so.
-"""
+"""Walk-forward robustness experiment: four test years, spike-weighted GRU, ensemble and alert probability."""
 
 from __future__ import annotations
 
@@ -49,13 +22,14 @@ from src.train import set_seed
 
 
 def _log(msg: str) -> None:
+    """Append one progress line to the progress log."""
     config.ROBUST_DIR.mkdir(parents=True, exist_ok=True)
     with open(config.ROBUST_DIR / "progress.log", "a", encoding="utf-8") as f:
         f.write(f"{datetime.now():%H:%M:%S}  {msg}\n")
 
 
 def load_choices() -> dict:
-    """Settings chosen on 2024 validation by `python main.py extended`."""
+    """Settings chosen on the 2024 validation year."""
     path = config.V2_DIR / "selected.json"
     if not path.exists():
         raise FileNotFoundError("Run `python main.py extended` first: its validation choices are reused here.")
@@ -68,7 +42,7 @@ def load_choices() -> dict:
 
 
 def fold_table(table: pd.DataFrame, fold: dict) -> pd.DataFrame:
-    """Same table, split relabelled for one round; days after its test period are dropped."""
+    """Relabel the splits for one walk-forward round."""
     d = table["Date"]
     t = table[d <= pd.Timestamp(fold["test_end"])].copy()
     d = t["Date"]
@@ -78,18 +52,17 @@ def fold_table(table: pd.DataFrame, fold: dict) -> pd.DataFrame:
 
 
 def candidate(family: str, name: str) -> dict:
+    """Look up a candidate's settings by name."""
     return next(c for c in extended.candidates(family) if c["name"] == name)
 
 
-# ---------------------------------------------------------------------------
-# GRU trained with sample weights (spike-weighted) or as a classifier
-# ---------------------------------------------------------------------------
 def train_gru(cand, seed, X_tr, t_tr, w_tr, X_va, t_va, w_va, device, classify=False):
+    """Train a GRU, optionally weighted or as an alert classifier."""
     set_seed(seed)
     model = AQIGRU(X_tr.shape[2], hidden_size=cand["hidden_size"], num_layers=cand["num_layers"],
                    dropout=config.DROPOUT).to(device)
     gen = torch.Generator().manual_seed(seed)
-    tensors = lambda X, t, w: TensorDataset(torch.from_numpy(X), torch.from_numpy(t.astype(np.float32)),  # noqa: E731
+    tensors = lambda X, t, w: TensorDataset(torch.from_numpy(X), torch.from_numpy(t.astype(np.float32)),
                                             torch.from_numpy(w.astype(np.float32)))
     tl = DataLoader(tensors(X_tr, t_tr, w_tr), batch_size=config.BATCH_SIZE, shuffle=True, generator=gen)
     vl = DataLoader(tensors(X_va, t_va, w_va), batch_size=config.BATCH_SIZE, shuffle=False)
@@ -97,9 +70,9 @@ def train_gru(cand, seed, X_tr, t_tr, w_tr, X_va, t_va, w_va, device, classify=F
         pos = max(float(t_tr.sum()), 1.0)
         bce = nn.BCEWithLogitsLoss(reduction="none",
                                    pos_weight=torch.tensor((len(t_tr) - pos) / pos, device=device))
-        loss_fn = lambda p, t, w: (bce(p, t) * w).mean()        # noqa: E731
+        loss_fn = lambda p, t, w: (bce(p, t) * w).mean()
     else:
-        loss_fn = lambda p, t, w: (w * (p - t) ** 2).mean()      # noqa: E731
+        loss_fn = lambda p, t, w: (w * (p - t) ** 2).mean()
     opt = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY)
     best, state, bad = float("inf"), None, 0
     for _ in range(config.MAX_EPOCHS):
@@ -135,6 +108,7 @@ def train_gru(cand, seed, X_tr, t_tr, w_tr, X_va, t_va, w_va, device, classify=F
 
 
 def spike_weights(y, train_mean, gamma):
+    """Training weights that favour polluted days."""
     w = (np.asarray(y, float) / train_mean) ** gamma
     return w / w.mean()
 
@@ -144,10 +118,8 @@ def high_days(y) -> np.ndarray:
     return y >= np.quantile(y, 1 - config.SPIKE_TOP_SHARE)
 
 
-# ---------------------------------------------------------------------------
-# One walk-forward round
-# ---------------------------------------------------------------------------
 def run_fold(table, fold, choices, device) -> dict:
+    """Train and score every model for one round."""
     t = fold_table(table, fold)
     main = choices["main"]
     data = {fs: extended.build_data(t, fs) for fs in config.V2_FEATURE_SETS}
@@ -163,7 +135,6 @@ def run_fold(table, fold, choices, device) -> dict:
             _log(f"{fold['name']} | {family} [{fs}] seed {s}")
         return {k: np.mean([r[k] for r in runs], axis=0) for k in splits}
 
-    # main GRU and ensemble members
     gru = avg("GRU", main["feature_set"], main["candidate"])
     out["GRU"] = gru["test"]
     members = {"GRU": gru}
@@ -172,11 +143,10 @@ def run_fold(table, fold, choices, device) -> dict:
             members[fam] = avg(fam, c["feature_set"], c["candidate"])
     out["Ensemble"] = np.mean([m["test"] for m in members.values()], axis=0)
 
-    # spike-weighted GRU: gamma chosen on this round's validation high days
     cand = candidate("GRU", main["candidate"])
     mode = cand["target_mode"]
     stats = target_stats(tr, mode, data[main["feature_set"]][1])
-    enc = lambda w: encode_target(w.y_true, w.last_aqi, mode, stats)    # noqa: E731
+    enc = lambda w: encode_target(w.y_true, w.last_aqi, mode, stats)
     mean_y = tr.y_true.mean()
     hv = high_days(va.y_true)
     best_g, best_err, best_pred = None, float("inf"), None
@@ -193,9 +163,8 @@ def run_fold(table, fold, choices, device) -> dict:
             best_g, best_err, best_pred = g, err, np.mean(tests, axis=0)
     out["Spike-weighted GRU"], out["gamma"] = best_pred, best_g
 
-    # alert probability: P(tomorrow > 200), threshold chosen on validation F1
-    lab = lambda w: (w.y_true > config.ALERT_THRESHOLD).astype(np.float32)  # noqa: E731
-    ones = lambda w: np.ones(len(w), np.float32)                           # noqa: E731
+    lab = lambda w: (w.y_true > config.ALERT_THRESHOLD).astype(np.float32)
+    ones = lambda w: np.ones(len(w), np.float32)
     pv, pt = [], []
     for s in config.V2_SEEDS:
         f = train_gru(cand, s, tr.X, lab(tr), ones(tr), va.X, lab(va), ones(va), device, classify=True)
@@ -209,8 +178,8 @@ def run_fold(table, fold, choices, device) -> dict:
     return out
 
 
-# ---------------------------------------------------------------------------
 def run_robust(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
+    """Run all walk-forward rounds and write the report."""
     t0 = time.time()
     (config.ROBUST_DIR / "progress.log").unlink(missing_ok=True)
     device = pick_device(device_name)
@@ -237,21 +206,25 @@ def run_robust(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
     return res
 
 
+# Models reported in each round.
 MODELS = ["GRU", "Spike-weighted GRU", "Ensemble"]
 
 
 def _md(rows, header):
+    """Format rows as a Markdown table."""
     out = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     return "\n".join(out + ["| " + " | ".join(str(c) for c in r) + " |" for r in rows])
 
 
 def _ci(y, a, b):
+    """MAE difference against persistence with its 95% interval."""
     d, lo, hi = block_bootstrap_mae_diff(y, a, b)
     mark = " (better)" if hi < 0 else " (worse)" if lo > 0 else ""
     return f"{d:+.1f} [{lo:+.1f}, {hi:+.1f}]{mark}", hi < 0
 
 
 def _report(folds, choices, device, seconds) -> dict:
+    """Write the robustness report."""
     acc_rows, spike_rows, alert_rows, wins = [], [], [], {m: 0 for m in MODELS}
     for r in folds:
         y, p, name = r["y"], r["persistence"], r["fold"]["name"]
@@ -331,6 +304,7 @@ def _report(folds, choices, device, seconds) -> dict:
 
 
 def _plot(folds):
+    """Draw the walk-forward figure."""
     try:
         import matplotlib
         matplotlib.use("Agg")

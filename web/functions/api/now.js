@@ -1,14 +1,8 @@
-// Cloudflare Pages Function: GET /api/now
-// Government AQI for Kolkata right now, from CPCB's live station feed on data.gov.in.
-// Runs on Cloudflare's server nearest the visitor (inside India for Indian visitors),
-// keeps the API key secret (set DATA_GOV_API_KEY in the Pages project settings),
-// and caches the answer for 15 minutes so the key is not over-used.
-//
-// City AQI = mean over stations of each station's highest pollutant sub-index
-// (CPCB method: a station needs at least 3 pollutants, one of them PM2.5 or PM10).
+// Cloudflare Pages Function at /api/now: Kolkata's government AQI right now from CPCB's live feed on data.gov.in.
 
 const FEED = "https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69";
 
+// Fetch the live feed with the secret key, compute the city AQI the CPCB way, and return it as JSON (cached 15 minutes).
 export async function onRequest({ env }) {
   const headers = { "content-type": "application/json", "cache-control": "public, max-age=900" };
   if (!env.DATA_GOV_API_KEY) {

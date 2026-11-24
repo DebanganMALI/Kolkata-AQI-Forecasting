@@ -1,27 +1,4 @@
-"""
-Daily live forecast for the website. Needs only Python and NumPy.
-
-    python scripts/live_forecast.py            # the daily run (GitHub Actions, 16:15 IST)
-    python scripts/live_forecast.py seed       # once, on your PC: fill the AQI history
-                                               # from the newest CPCB city bulletin saved in
-                                               # data/live/bulletin/ (raw files stay untouched)
-
-Daily run:
-  1. Reads the CPCB real-time feed (data.gov.in) for the 7 Kolkata stations.
-     Each station's AQI = the highest of its pollutant sub-indices (CPCB rule:
-     at least 3 pollutants, one of them PM2.5 or PM10). City AQI = the mean
-     over the stations, as in the CPCB city bulletin. Saved for today's date.
-  2. Reads the last 14 days of weather from Open-Meteo (same 12 variables).
-  3. Runs the live GRU (models/live/gru_live.npz) and forecasts tomorrow.
-  4. Writes web/data/live.json for the website.
-
-Rules, as in the rest of the project: an AQI value is never invented; a
-missing day is carried forward as an INPUT for at most 7 days, and no
-forecast is made if the history has a longer gap.
-
-The API key comes from the environment variable DATA_GOV_API_KEY (a GitHub
-secret); it is never stored in the repository.
-"""
+"""Helpers for the live forecast: city AQI from the CPCB feed, AQI history files and the NumPy GRU."""
 
 from __future__ import annotations
 
@@ -37,14 +14,16 @@ from pathlib import Path
 
 import numpy as np
 
+# File locations.
 ROOT = Path(__file__).resolve().parents[1]
 LIVE = ROOT / "data" / "live"
-AQI_CSV = LIVE / "aqi_daily.csv"            # date, aqi, source, stations
-FORECASTS_CSV = LIVE / "forecasts.csv"      # made_on, target_date, forecast, low, high
+AQI_CSV = LIVE / "aqi_daily.csv"
+FORECASTS_CSV = LIVE / "forecasts.csv"
 WEIGHTS = ROOT / "models" / "live" / "gru_live.npz"
 META = ROOT / "models" / "live" / "gru_live.json"
 SITE = ROOT / "web" / "data" / "live.json"
 
+# Data source, coordinates, time zone and weather variables.
 RESOURCE = "3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69"
 LAT, LON = 22.5726, 88.3639
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -62,17 +41,19 @@ CATEGORIES = [(50, "Good"), (100, "Satisfactory"), (200, "Moderate"),
 
 
 def category(aqi: float) -> str:
+    """Return the CPCB category name for an AQI value."""
     return next(name for top, name in CATEGORIES if aqi <= top)
 
 
 def get_json(url: str) -> dict:
+    """Download a URL and parse it as JSON."""
     req = urllib.request.Request(url, headers={"User-Agent": "kolkata-aqi-forecast"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
-# ---------------------------------------------------------------- AQI history
 def read_aqi() -> dict[str, dict]:
+    """Read the saved daily AQI history."""
     if not AQI_CSV.exists():
         return {}
     with AQI_CSV.open(newline="") as f:
@@ -80,6 +61,7 @@ def read_aqi() -> dict[str, dict]:
 
 
 def write_aqi(rows: dict[str, dict]) -> None:
+    """Save the daily AQI history."""
     LIVE.mkdir(parents=True, exist_ok=True)
     with AQI_CSV.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["date", "aqi", "source", "stations"])
@@ -89,7 +71,7 @@ def write_aqi(rows: dict[str, dict]) -> None:
 
 
 def city_aqi_from_records(records: list[dict]) -> tuple[float | None, int]:
-    """Station AQI = max sub-index (>= 3 pollutants incl. PM2.5 or PM10); city = mean."""
+    """City AQI = mean over stations of each station's highest pollutant sub-index."""
     by_station: dict[str, dict[str, float]] = {}
     for r in records:
         try:
@@ -107,6 +89,7 @@ def city_aqi_from_records(records: list[dict]) -> tuple[float | None, int]:
 
 
 def fetch_live_aqi(key: str) -> tuple[float | None, int, str]:
+    """Fetch the live CPCB feed for Kolkata and compute the city AQI."""
     q = urllib.parse.urlencode({"api-key": key, "format": "json", "limit": 500,
                                 "filters[city]": "Kolkata"})
     records = get_json(f"https://api.data.gov.in/resource/{RESOURCE}?{q}").get("records", [])
@@ -115,8 +98,8 @@ def fetch_live_aqi(key: str) -> tuple[float | None, int, str]:
     return aqi, n, (stamps[-1] if stamps else "")
 
 
-# ---------------------------------------------------------------- weather
 def fetch_weather(start: date, end: date) -> dict[str, dict]:
+    """Download recent daily weather from Open-Meteo."""
     q = urllib.parse.urlencode({
         "latitude": LAT, "longitude": LON, "timezone": "Asia/Kolkata",
         "daily": ",".join(WEATHER_DAILY), "past_days": (date.today() - start).days + 2,
@@ -134,8 +117,8 @@ def fetch_weather(start: date, end: date) -> dict[str, dict]:
     return out
 
 
-# ---------------------------------------------------------------- model
 def load_model():
+    """Load the live GRU settings and weights."""
     meta = json.loads(META.read_text())
     raw = np.load(WEIGHTS)
     seeds = [{k: raw[f"s{i}_{k}"] for k in ("weight_ih", "weight_hh", "bias_ih", "bias_hh",
@@ -144,9 +127,10 @@ def load_model():
 
 
 def gru(w: dict, x: np.ndarray) -> float:
+    """Run the GRU and its output layer in NumPy for one 14-day window."""
     H = w["weight_hh"].shape[1]
     h = np.zeros(H)
-    sig = lambda a: 1.0 / (1.0 + np.exp(-a))  # noqa: E731
+    sig = lambda a: 1.0 / (1.0 + np.exp(-a))
     for step in x:
         gi, gh = w["weight_ih"] @ step + w["bias_ih"], w["weight_hh"] @ h + w["bias_hh"]
         r, z = sig(gi[:H] + gh[:H]), sig(gi[H:2 * H] + gh[H:2 * H])
@@ -156,7 +140,7 @@ def gru(w: dict, x: np.ndarray) -> float:
 
 
 def aqi_inputs(history: dict[str, dict], days: list[date]) -> list[float] | None:
-    """AQI input for each day, carried forward at most FFILL_LIMIT days; None if a gap is longer."""
+    """Daily AQI inputs, carried forward at most 7 days; None if a gap is longer."""
     known = {d: float(r["aqi"]) for d, r in history.items() if r["aqi"] not in ("", None)}
     out = []
     for day in days:
@@ -171,6 +155,7 @@ def aqi_inputs(history: dict[str, dict], days: list[date]) -> list[float] | None
 
 
 def forecast(today: date, history: dict[str, dict]) -> dict | None:
+    """Forecast tomorrow's AQI from the last 14 days."""
     meta, seeds = load_model()
     days = [today - timedelta(days=k) for k in range(meta["lookback"] - 1, -1, -1)]
     aqi = aqi_inputs(history, days)
@@ -197,8 +182,8 @@ def forecast(today: date, history: dict[str, dict]) -> dict | None:
             "forecast": round(p), "low": max(0, round(p + lo)), "high": round(p + hi)}
 
 
-# ---------------------------------------------------------------- files
 def read_forecasts() -> dict[str, dict]:
+    """Read the saved forecasts."""
     if not FORECASTS_CSV.exists():
         return {}
     with FORECASTS_CSV.open(newline="") as f:
@@ -206,6 +191,7 @@ def read_forecasts() -> dict[str, dict]:
 
 
 def write_forecasts(rows: dict[str, dict]) -> None:
+    """Save the forecasts."""
     with FORECASTS_CSV.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["made_on", "target_date", "forecast", "low", "high"])
         w.writeheader()
@@ -214,6 +200,7 @@ def write_forecasts(rows: dict[str, dict]) -> None:
 
 
 def write_site(history, forecasts, feed_time) -> None:
+    """Write the live forecast data file for the website."""
     track = []
     for d in sorted(forecasts):
         f = forecasts[d]
@@ -235,6 +222,7 @@ def write_site(history, forecasts, feed_time) -> None:
 
 
 def daily() -> None:
+    """Daily run: save today's AQI, forecast tomorrow and update the site data."""
     key = os.environ.get("DATA_GOV_API_KEY")
     if not key:
         sys.exit("Set DATA_GOV_API_KEY (data.gov.in API key).")
@@ -259,7 +247,7 @@ def daily() -> None:
 
 
 def seed() -> None:
-    """Fill the AQI history from the official CPCB city bulletin (run once on your PC)."""
+    """Fill the AQI history from the official CPCB city bulletin files."""
     sys.path.insert(0, str(ROOT))
     from src.extended_data import convert_city_aqi_xlsx
     src_dir = LIVE / "bulletin"

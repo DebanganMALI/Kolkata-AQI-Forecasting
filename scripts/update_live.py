@@ -1,26 +1,4 @@
-"""
-Daily live update for the website (run by GitHub Actions at 17:45 IST, or by hand).
-
-    python scripts/update_live.py
-
-1. Downloads every CPCB daily AQI bulletin (4 PM, 24-hour average) that is
-   missing since the last one saved, up to today.
-2. Reads Kolkata's official city AQI from them (scripts/read_bulletins.py).
-3. Downloads recent real weather + the 16-day forecast from Open-Meteo.
-4. If DATA_GOV_API_KEY is set and data.gov.in is reachable (it answers from
-   India, not from GitHub's US servers), reads CPCB's live station feed and
-   computes the government AQI right now: each station's AQI is its highest
-   pollutant sub-index, the city value is the mean over stations (CPCB method;
-   on 24 Nov 2026 the feed gave 67 against the official 63). Saved to
-   web/data/now.json for the website.
-5. Rebuilds the outlook (scripts/build_outlook.py): the newest official value
-   becomes the starting point, so "tomorrow" is always a one-day-ahead forecast.
-
-Note on cpcb.nic.in: its HTTPS certificate had expired (Nov 2026), so the
-bulletins are fetched without certificate checking, for that host only. They
-are public PDFs that are only read, and every value is checked (date, category,
-station count) before use.
-"""
+"""Daily live update: new CPCB bulletins, weather, government AQI now, and a rebuilt outlook."""
 
 from __future__ import annotations
 
@@ -34,17 +12,19 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+# Make the project and scripts folders importable.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import build_outlook  # noqa: E402
-import read_bulletins  # noqa: E402
+import build_outlook
+import read_bulletins
 
+# File locations, data sources and weather variables.
 PDF_DIR = ROOT / "data" / "live" / "bulletin_pdf"
 BULLETIN_CSV = ROOT / "data" / "live" / "bulletin_aqi.csv"
 WEATHER_CSV = ROOT / "data" / "live" / "weather_recent.csv"
-FIRST_DAY = date(2026, 11, 1)                 # the main data ends on 31 Oct 2026
+FIRST_DAY = date(2026, 11, 1)
 IST = timezone(timedelta(hours=5, minutes=30))
 CPCB = "https://cpcb.nic.in/upload/Downloads/AQI_Bulletin_{}.pdf"
 WEATHER_VARS = ("temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum,"
@@ -54,6 +34,7 @@ UA = {"User-Agent": "Mozilla/5.0 (kolkata-aqi-forecast)"}
 
 
 def fetch(url: str, verify: bool = True) -> bytes:
+    """Download a URL (certificate check can be skipped for CPCB's expired certificate)."""
     ctx = ssl.create_default_context()
     if not verify:
         ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
@@ -62,14 +43,15 @@ def fetch(url: str, verify: bool = True) -> bytes:
 
 
 def download_bulletins() -> int:
+    """Download every CPCB bulletin missing since 1 Nov 2026."""
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now(IST)
-    last = now.date() if now.hour >= 17 else now.date() - timedelta(days=1)   # today's appears after ~4:30 PM
+    last = now.date() if now.hour >= 17 else now.date() - timedelta(days=1)
     got = 0
     d = FIRST_DAY
     while d <= last:
         f = PDF_DIR / f"AQI_Bulletin_{d:%Y%m%d}.pdf"
-        if not f.exists() or f.read_bytes()[:4] != b"%PDF":     # missing, or saved before it was published
+        if not f.exists() or f.read_bytes()[:4] != b"%PDF":
             try:
                 data = fetch(CPCB.format(f"{d:%Y%m%d}"), verify=False)
                 if data[:4] == b"%PDF":
@@ -78,13 +60,14 @@ def download_bulletins() -> int:
                     print(f"  downloaded bulletin {d}")
                 else:
                     print(f"  bulletin {d}: not a PDF (not published yet?)")
-            except Exception as e:                     # noqa: BLE001
+            except Exception as e:
                 print(f"  bulletin {d}: {e}")
         d += timedelta(days=1)
     return got
 
 
 def download_weather() -> None:
+    """Download recent real weather and the 16-day forecast from Open-Meteo."""
     q = urllib.parse.urlencode({"latitude": 22.5726, "longitude": 88.3639, "daily": WEATHER_VARS,
                                 "timezone": "Asia/Kolkata", "past_days": 31, "forecast_days": 16,
                                 "format": "csv"})
@@ -92,11 +75,13 @@ def download_weather() -> None:
     print("  weather updated (31 past days + 16-day forecast)")
 
 
+# Output file and live feed address.
 NOW_JSON = ROOT / "web" / "data" / "now.json"
 FEED = "https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69"
 
 
 def government_now() -> None:
+    """Compute the government AQI right now from the live CPCB feed and save it."""
     key = os.environ.get("DATA_GOV_API_KEY")
     if not key:
         print("  DATA_GOV_API_KEY not set - skipped")
@@ -105,7 +90,7 @@ def government_now() -> None:
     q = urllib.parse.urlencode({"api-key": key, "format": "json", "limit": 500, "filters[city]": "Kolkata"})
     try:
         records = json.loads(fetch(f"{FEED}?{q}"))["records"]
-    except Exception as e:                             # noqa: BLE001
+    except Exception as e:
         print(f"  live feed not reachable from here: {e}")
         return
     aqi, n = city_aqi_from_records(records)
@@ -119,6 +104,7 @@ def government_now() -> None:
 
 
 def main() -> None:
+    """Run all update steps in order."""
     print("1. CPCB bulletins")
     download_bulletins()
     print("2. Reading Kolkata values")

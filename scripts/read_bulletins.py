@@ -1,17 +1,4 @@
-"""
-Read Kolkata's official city AQI from CPCB daily bulletin PDFs.
-
-    python scripts/read_bulletins.py
-
-Input:  data/live/bulletin_pdf/AQI_Bulletin_YYYYMMDD.pdf  (CPCB daily 4 PM bulletin,
-        from https://cpcb.nic.in/upload/Downloads/; their certificate had expired in
-        Nov 2026, so they were downloaded with curl -k)
-Output: data/live/bulletin_aqi.csv  (date, aqi, category, stations)
-
-Each value is checked: the bulletin's own date must match the file name, the
-category must agree with the CPCB band for the value, and all 7 Kolkata
-stations must have reported. A file that fails a check is skipped, never guessed.
-"""
+"""Reads Kolkata's official city AQI from CPCB daily bulletin PDFs into data/live/bulletin_aqi.csv."""
 
 from __future__ import annotations
 
@@ -22,6 +9,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
+# File locations, AQI bands and text patterns.
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "data" / "live" / "bulletin_pdf"
 OUT = ROOT / "data" / "live" / "bulletin_aqi.csv"
@@ -31,10 +19,12 @@ DATE = re.compile(r"Air Quality Index on\s+([A-Za-z]{3}\s+\d{1,2},\s+\d{4})")
 
 
 def band(v: int) -> str:
+    """Return the CPCB category for an AQI value."""
     return next(name for top, name in BANDS if v <= top)
 
 
 def read(path: Path) -> dict | None:
+    """Read and check the Kolkata row of one bulletin PDF."""
     if path.read_bytes()[:4] != b"%PDF":
         print(f"  {path.name}: not a PDF (bulletin not published yet when downloaded) - skipped")
         return None
@@ -60,6 +50,7 @@ def read(path: Path) -> dict | None:
 
 
 def main() -> None:
+    """Read every bulletin and save the checked values as CSV."""
     rows = [r for f in sorted(SRC.glob("AQI_Bulletin_*.pdf")) if (r := read(f))]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", newline="") as fh:

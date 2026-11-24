@@ -1,17 +1,4 @@
-"""
-Turn the saved test-period forecasts into web/data/test.json for the website.
-
-    python scripts/build_site_data.py
-
-Every forecast here was made from the 14 days before the target day, by models
-that never saw the test period (2025-01-01 to 2026-10-31) during training or
-model choice. Sources:
-  reports/extended_test_predictions.csv  GRU [pollution+weather] (the chosen model),
-                                         quantile 10th/90th percentile, persistence
-  reports/robust_test_predictions.csv    ensemble, round "2025-2026"
-  data/processed/kolkata_extended_daily.csv  that day's weather (shown for context only;
-                                         the forecast used weather up to the day before)
-"""
+"""Turns the saved test-period forecasts and weather into web/data/test.json for the website."""
 
 from __future__ import annotations
 
@@ -21,11 +8,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Project folder and output file.
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "web" / "data" / "test.json"
 
 
 def main() -> None:
+    """Merge GRU, ensemble, persistence, forecast range and weather per test day and save JSON."""
     ext = pd.read_csv(ROOT / "reports" / "extended_test_predictions.csv")
     rob = pd.read_csv(ROOT / "reports" / "robust_test_predictions.csv")
     rob = rob[rob["date"] >= ext["date"].min()][["date", "Ensemble"]]

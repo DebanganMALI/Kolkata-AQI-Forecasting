@@ -1,9 +1,4 @@
-"""
-Loading the raw Kaggle file.
-
-The raw CSV is only ever READ here. Nothing in the project writes to
-data/raw/, so the original download stays exactly as it was.
-"""
+"""Loads the raw Kaggle city_day.csv file."""
 
 from __future__ import annotations
 
@@ -24,7 +19,7 @@ def load_raw(path: Path = config.RAW_CSV) -> pd.DataFrame:
 
 
 def load_city(raw: pd.DataFrame, city: str = config.CITY) -> pd.DataFrame:
-    """Return one city's rows, with Date parsed and sorted oldest -> newest."""
+    """Return one city's rows, sorted by date."""
     df = raw[raw["City"] == city].copy()
     if df.empty:
         raise ValueError(f"No rows found for City == {city!r}")

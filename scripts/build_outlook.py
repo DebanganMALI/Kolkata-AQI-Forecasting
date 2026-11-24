@@ -1,32 +1,4 @@
-"""
-Seasonal outlook for dates after the last real data, for the website.
-
-    python scripts/build_outlook.py
-
-How it works (a rolling forecast):
-  * Start from the last 14 real days (official CPCB city AQI to 31 Oct 2026).
-  * The live GRU (models/live) forecasts the next day. That forecast is then
-    used as if it were real to forecast the day after, and so on.
-  * Weather: real Open-Meteo values for recent days and its 16-day forecast for
-    the next days (data/live/weather_recent.csv); beyond that, the AVERAGE
-    weather of that calendar day over 2018-2026 (a 15-day smoothed climatology).
-
-The further ahead, the more this becomes a seasonal pattern rather than a
-precise forecast. So the uncertainty is measured honestly by a backtest: the
-same rolling method is started every 7 days in the test period (2025-26),
-using climatology from 2018-2024 only, and its errors against what really
-happened are collected by how many days ahead it was. The typical error (MAE)
-and the 80% range (10th to 90th percentile of actual / forecast, so the range
-scales with the level: wider on smoggy winter days, narrower in the monsoon)
-come from that backtest for each horizon.
-
-Newer official values (CPCB daily bulletins, scripts/read_bulletins.py) are
-added after the main data. They are used two ways: as a real-world check
-(each day forecast from the bulletins up to the day before, compared with what
-the bulletin then said) and as the new starting point of the outlook.
-
-Writes web/data/outlook.json.
-"""
+"""Builds the website's future outlook: rolls the live GRU forward day by day and measures its error by backtest."""
 
 from __future__ import annotations
 
@@ -36,13 +8,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# File locations, outlook end date, backtest settings and error buckets.
 ROOT = Path(__file__).resolve().parents[1]
 TABLE = ROOT / "data" / "processed" / "kolkata_extended_daily.csv"
 META = ROOT / "models" / "live" / "gru_live.json"
 WEIGHTS = ROOT / "models" / "live" / "gru_live.npz"
 OUT = ROOT / "web" / "data" / "outlook.json"
-BULLETIN = ROOT / "data" / "live" / "bulletin_aqi.csv"     # official daily bulletins after the main data
-WEATHER_RECENT = ROOT / "data" / "live" / "weather_recent.csv"  # Open-Meteo: recent days + 16-day forecast
+BULLETIN = ROOT / "data" / "live" / "bulletin_aqi.csv"
+WEATHER_RECENT = ROOT / "data" / "live" / "weather_recent.csv"
 OUTLOOK_END = "2027-12-31"
 BACKTEST_START, BACKTEST_STEP, BACKTEST_MAX = "2025-01-01", 7, 365
 BUCKETS = [(1, 1), (2, 3), (4, 7), (8, 14), (15, 30), (31, 60), (61, 120), (121, 365), (366, 430)]
@@ -50,6 +23,7 @@ SHOW_WEATHER = ["temp_mean", "temp_min", "temp_max", "humidity", "rain_mm", "win
 
 
 def load_model():
+    """Load the live GRU settings and the weights of every seed."""
     meta = json.loads(META.read_text())
     raw = np.load(WEIGHTS)
     keys = ("weight_ih", "weight_hh", "bias_ih", "bias_hh", "head_w", "head_b")
@@ -57,7 +31,7 @@ def load_model():
 
 
 def gru_batch(w, x):
-    """torch.nn.GRU (1 layer) + linear head in NumPy. x: (batch, days, features)."""
+    """Run the GRU and its output layer in NumPy for a batch of 14-day windows."""
     H = w["weight_hh"].shape[1]
     h = np.zeros((x.shape[0], H))
     for step in range(x.shape[1]):
@@ -71,7 +45,7 @@ def gru_batch(w, x):
 
 
 def climatology(t: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    """Mean of each column per calendar day (1-365), smoothed over 15 days, wrapping the year."""
+    """Average each column per calendar day over all years, smoothed over 15 days."""
     doy = t["Date"].dt.day_of_year.clip(upper=365)
     c = t.groupby(doy)[cols].mean().reindex(range(1, 366)).interpolate()
     c = pd.concat([c.iloc[-7:], c, c.iloc[:7]]).rolling(15, center=True).mean().iloc[7:-7]
@@ -81,8 +55,7 @@ def climatology(t: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 def day_features(dates: pd.DatetimeIndex, clim: pd.DataFrame, weather_cols: list[str],
                  known: pd.DataFrame | None = None) -> np.ndarray:
-    """Weather + day of year for each date, in the model's column order.
-    Real (or forecast) weather where `known` has it, climatology everywhere else."""
+    """Build each date's weather and day-of-year inputs, using real weather where known."""
     doy = np.minimum(dates.day_of_year, 365)
     ang = 2 * np.pi * (dates.day_of_year - 1) / np.where(dates.is_leap_year, 366, 365)
     w = clim.loc[doy, weather_cols].to_numpy(float)
@@ -94,13 +67,13 @@ def day_features(dates: pd.DatetimeIndex, clim: pd.DataFrame, weather_cols: list
 
 def roll(meta, seeds, clim, hist_aqi: np.ndarray, first_dates: list[pd.Timestamp], n: int,
          known: pd.DataFrame | None = None) -> np.ndarray:
-    """Rolling forecasts for several start points at once. hist_aqi: (batch, 14) real AQI before each start."""
+    """Forecast day after day from several start points, feeding each forecast back in."""
     L = meta["lookback"]
-    weather_cols = meta["features"][1:-2]          # features = AQI, weather..., doy_sin, doy_cos
+    weather_cols = meta["features"][1:-2]
     mean, std, s = np.array(meta["feature_mean"]), np.array(meta["feature_std"]), meta["target"]
     B = len(first_dates)
     feats = np.stack([day_features(pd.date_range(d - pd.Timedelta(days=L), periods=L + n), clim, weather_cols, known)
-                      for d in first_dates])        # (B, L+n, F-1)
+                      for d in first_dates])
     aqi = np.zeros((B, L + n))
     aqi[:, :L] = hist_aqi
     for k in range(n):
@@ -116,6 +89,7 @@ def roll(meta, seeds, clim, hist_aqi: np.ndarray, first_dates: list[pd.Timestamp
 
 
 def main() -> None:
+    """Backtest the rolling forecast, check it on recent bulletins, and write outlook.json."""
     meta, seeds = load_model()
     t = pd.read_csv(TABLE, parse_dates=["Date"])
     weather_cols = meta["features"][1:-2]
@@ -123,10 +97,9 @@ def main() -> None:
     aqi = t.set_index("Date")["AQI"]
     target = t.set_index("Date")["AQI_target"]
 
-    # ---- backtest on 2025-26 with climatology from 2018-2024 only
     past = t[t["Date"] <= "2024-12-31"]
     clim_bt = climatology(past, weather_cols)
-    season_bt = climatology(past.assign(a=past["AQI"]), ["a"])["a"]    # seasonal-average baseline
+    season_bt = climatology(past.assign(a=past["AQI"]), ["a"])["a"]
     last_day = t["Date"].max()
     starts = pd.date_range(BACKTEST_START, last_day - pd.Timedelta(days=1), freq=f"{BACKTEST_STEP}D")
     hist = np.stack([aqi.loc[d - pd.Timedelta(days=L): d - pd.Timedelta(days=1)].to_numpy() for d in starts])
@@ -146,7 +119,7 @@ def main() -> None:
         e = np.array([a - f for a, f in pairs])
         ratio = np.array([a / f for a, f in pairs if f > 0])
         b = np.concatenate([base[h] for h in range(lo, min(hi, BACKTEST_MAX) + 1)] or [[]])
-        if len(e) < 30:                      # beyond the backtest: reuse the longest measured horizon
+        if len(e) < 30:
             buckets.append({**buckets[-1], "from": lo, "to": hi, "extrapolated": True})
             continue
         buckets.append({"from": lo, "to": hi, "n": int(len(e)), "mae": round(float(np.mean(np.abs(e))), 1),
@@ -166,7 +139,6 @@ def main() -> None:
         known = known[known.index > t["Date"].max()]
         print(f"Real/forecast weather: {known.index.min().date()} to {known.index.max().date()}")
 
-    # ---- newer official bulletins: real-world check, then the new starting point
     recent, check = [], {}
     if BULLETIN.exists():
         b = pd.read_csv(BULLETIN, parse_dates=["date"]).set_index("date")["aqi"].astype(float)
@@ -195,7 +167,6 @@ def main() -> None:
         else:
             print("Bulletin file does not continue the main data day by day - ignored.")
 
-    # ---- the outlook itself, from the last 14 real days, with climatology from all data
     first = last_day + pd.Timedelta(days=1)
     dates = pd.date_range(first, OUTLOOK_END)
     fc = roll(meta, seeds, clim, aqi.loc[:last_day].tail(L).to_numpy()[None], [first], len(dates), known)[0]

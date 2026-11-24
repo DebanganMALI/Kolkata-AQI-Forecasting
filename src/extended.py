@@ -1,19 +1,4 @@
-"""
-Extended experiment on 2018-2026 official data:  python main.py extended
-
-Same task as before (previous 14 days -> next-day AQI), now with:
-  * the official CPCB city AQI as the target, 2,900+ days instead of 747;
-  * a full calendar year (2024) as validation and 22 months as test;
-  * three feature sets: pollution | + weather | + weather + fires + festivals;
-  * eight forecasters: ridge, random forest, XGBoost, GRU, LSTM,
-    attention LSTM, TCN, Transformer (+ persistence);
-  * forecast ranges (quantile attention LSTM), 1/3/7 days ahead, and a
-    learning curve (does more training data help?).
-
-Rules: candidate settings fixed in config.py; every choice (setting, feature
-set, model) on validation only and saved to models/extended/selected.json
-before the chosen models are re-trained (same seeds) and scored on test, once.
-"""
+"""Extended experiment on official 2018-2026 data: 8 forecasters on 3 input sets."""
 
 from __future__ import annotations
 
@@ -34,26 +19,25 @@ from src.model import pick_device
 from src.preprocessing import StandardScaler
 
 def _log(msg: str) -> None:
-    """One line per step in models/extended/progress.log, written immediately (readable mid-run)."""
+    """Append one progress line to the progress log."""
     config.V2_DIR.mkdir(parents=True, exist_ok=True)
     with open(config.V2_DIR / "progress.log", "a", encoding="utf-8") as f:
         f.write(f"{datetime.now():%H:%M:%S}  {msg}\n")
 
 
+# Model families in the extended experiment.
 FAMILIES = ["Linear (ridge)", "Random forest", "XGBoost", "GRU", "LSTM",
             "Attention LSTM", "TCN", "Transformer"]
 ADVANCED = ("Attention LSTM", "TCN", "Transformer")
 
 
-# ---------------------------------------------------------------------------
-# Data
-# ---------------------------------------------------------------------------
 def columns_for(feature_set: str) -> list[str]:
+    """Input columns for a feature set."""
     return ["AQI", *POLLUTANTS, "doy_sin", "doy_cos", *config.V2_FEATURE_SETS[feature_set]]
 
 
 def extended_windows(table: pd.DataFrame, scaler: StandardScaler, horizon: int = 1) -> Windows:
-    """14-day windows; samples whose target day has no official AQI are dropped."""
+    """Build 14-day windows, dropping targets without an official AQI."""
     w = make_windows(table, scaler, horizon=horizon)
     target = table.set_index("Date")["AQI_target"]
     y = target.reindex(pd.to_datetime(w.target_dates)).to_numpy()
@@ -62,22 +46,21 @@ def extended_windows(table: pd.DataFrame, scaler: StandardScaler, horizon: int =
 
 
 def build_data(table: pd.DataFrame, feature_set: str, horizon: int = 1):
+    """Fit the scaler on training rows and build the windows."""
     scaler = StandardScaler.fit(table[table["split"] == "train"], columns_for(feature_set))
     return extended_windows(table, scaler, horizon), scaler
 
 
 def last_years(data, years: int):
-    """Same windows, but only the last `years` of the training period stay 'train'."""
+    """Keep only the last N training years, for the learning curve."""
     w, scaler = data
     cut = np.datetime64(pd.Timestamp(config.V2_TRAIN_END) - pd.DateOffset(years=years))
     split = np.where((w.split == "train") & (w.target_dates <= cut), "unused", w.split)
     return Windows(w.X, w.y_true, w.last_aqi, w.target_dates, split), scaler
 
 
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
 def candidates(family: str) -> list[dict]:
+    """Candidate settings for a model family."""
     if family in ("GRU", "LSTM"):
         return config.V2_RNN_CANDIDATES
     if family in ADVANCED:
@@ -86,10 +69,12 @@ def candidates(family: str) -> list[dict]:
 
 
 def seeds_for(family: str) -> list[int]:
+    """Seeds for a model family."""
     return [config.SEED] if family == "Linear (ridge)" else list(config.V2_SEEDS)
 
 
 def fit(family, cand, seed, data, splits, device, quantile=False):
+    """Train one model and return its forecasts for the requested splits."""
     if family not in ADVANCED and not quantile:
         return compare.fit_predict(family, cand, seed, data, splits, device)
     w, scaler = data
@@ -109,6 +94,7 @@ def fit(family, cand, seed, data, splits, device, quantile=False):
 
 
 def seed_average(family, cand, data, splits, device, quantile=False, label=""):
+    """Train every seed and average the forecasts."""
     runs = []
     for s in seeds_for(family):
         runs.append(fit(family, cand, s, data, splits, device, quantile))
@@ -116,10 +102,8 @@ def seed_average(family, cand, data, splits, device, quantile=False, label=""):
     return {s: np.mean([r[0][s] for r in runs], axis=0) for s in splits}, [r[1] for r in runs]
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
+    """Run the whole extended experiment and write its report."""
     t0 = time.time()
     device = pick_device(device_name)
     (config.V2_DIR / "progress.log").unlink(missing_ok=True)
@@ -132,7 +116,6 @@ def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict
               f"val {len(ref.subset('val'))} | test {len(ref.subset('test'))}")
         print("Phase 1 - choosing settings and feature sets on VALIDATION...\n")
 
-    # ---- Phase 1: validation only -----------------------------------------
     rows = []
     for fs, d in data.items():
         y_val = d[0].subset("val").y_true
@@ -156,7 +139,6 @@ def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict
     best = summary.loc[summary.groupby(["feature_set", "family"], sort=False)["mean"].idxmin()]
     overall = best.loc[best["mean"].idxmin()]
 
-    # quantile model on the feature set the attention LSTM did best with
     q_fs = best[best["family"] == "Attention LSTM"].sort_values("mean").iloc[0]["feature_set"]
     qd, q_rows = data[q_fs], []
     for cand in config.ADVANCED_CANDIDATES["Quantile attention LSTM"]:
@@ -175,7 +157,6 @@ def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict
                    "quantile_model": {"feature_set": q_fs, "candidate": q_best},
                    "decided_at": datetime.now().isoformat(timespec="seconds")}, f, indent=2)
 
-    # ---- Phase 2: re-train chosen settings, score test once ---------------
     if verbose:
         print(f"\nChosen on validation: {overall['family']} [{overall['feature_set']}] "
               f"({overall['candidate']}). Phase 2 - scoring on TEST once...")
@@ -194,7 +175,6 @@ def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict
     qpred = seed_average("Attention LSTM", qcand, qd, ["test"], device, quantile=True,
                          label="quantile |")[0]["test"]
 
-    # horizons and learning curve for the overall choice
     ocand = next(c for c in candidates(overall["family"]) if c["name"] == overall["candidate"])
     horizons = []
     for h in config.HORIZONS:
@@ -229,19 +209,19 @@ def run_extended(device_name: str = config.DEVICE, verbose: bool = True) -> dict
     return r
 
 
-# ---------------------------------------------------------------------------
-# Scoring and report
-# ---------------------------------------------------------------------------
 def _verdict(lo, hi):
+    """Describe a 95% interval as better, worse or no clear difference."""
     return "better than persistence" if hi < 0 else "worse than persistence" if lo > 0 else "no clear difference"
 
 
 def _md(rows, header):
+    """Format rows as a Markdown table."""
     out = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     return "\n".join(out + ["| " + " | ".join(str(c) for c in r) + " |" for r in rows])
 
 
 def _score(table, log, te, best, overall, preds, qpred, q_fs, attention, horizons, curve, device, seconds):
+    """Score all models on the test period and collect results."""
     y, pers = te.y_true, te.last_aqi
     rows = [{"feature_set": "-", "family": "Persistence", "candidate": "-", "val": np.nan,
              **regression_metrics(y, pers), "F1": alert_metrics(y, pers)["F1"], "diff": 0, "lo": 0, "hi": 0}]
@@ -287,6 +267,7 @@ def _score(table, log, te, best, overall, preds, qpred, q_fs, attention, horizon
 
 
 def _write(r):
+    """Write the extended results report."""
     t, ov, iv, log = r["test"], r["overall"], r["intervals"], r["log"]
     tab = r["table"]
     ovr = t[(t["family"] == ov["family"]) & (t["feature_set"] == ov["feature_set"])].iloc[0]
@@ -358,6 +339,7 @@ def _write(r):
 
 
 def _plots(r) -> list:
+    """Draw the extended experiment figures."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -407,6 +389,7 @@ def _plots(r) -> list:
 
 
 def _print(r):
+    """Print a short summary of the extended results."""
     print("\nTEST period 2025-2026 (scored once):")
     for _, x in r["test"].iterrows():
         extra = "" if x["family"] == "Persistence" else \

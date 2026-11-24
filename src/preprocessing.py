@@ -1,19 +1,4 @@
-"""
-Preprocessing: turn the raw Kolkata rows into a clean daily table.
-
-Rules followed here (see reports/preprocessing_decisions.md):
-  * The raw file is never modified; the result is saved to data/processed/.
-  * Only dates from config.START_DATE onwards are used.
-  * Xylene is dropped (too incomplete).
-  * Any remaining gap in an INPUT column is filled with the previous day's
-    value (forward fill). This uses only the past, never the future. Every
-    filled cell is marked in a "<column>_imputed" flag column, so real
-    observations and filled values can always be told apart.
-  * The TARGET (AQI) is never filled. If AQI were missing inside the chosen
-    period the script stops with an error instead of inventing values.
-  * The scaler (mean / standard deviation) is learned from the TRAINING
-    period only, then applied unchanged to validation and test.
-"""
+"""Turns the raw Kolkata rows into a clean daily table with chronological splits and a training-only scaler."""
 
 from __future__ import annotations
 
@@ -29,11 +14,8 @@ from src import config
 from src.data_loader import load_city, load_raw
 
 
-# ---------------------------------------------------------------------------
-# Column helpers
-# ---------------------------------------------------------------------------
 def feature_columns() -> list[str]:
-    """Model input columns, in a fixed order. AQI itself (past values) is the first input."""
+    """Model input columns, in a fixed order."""
     cols = [config.TARGET] + list(config.POLLUTANT_FEATURES)
     if config.USE_CALENDAR_FEATURES:
         cols += ["doy_sin", "doy_cos"]
@@ -41,18 +23,15 @@ def feature_columns() -> list[str]:
 
 
 def assign_split(dates: pd.Series | pd.DatetimeIndex) -> np.ndarray:
-    """Label each date train / val / test using the fixed cut-off dates."""
+    """Label each date train, validation or test."""
     d = pd.to_datetime(pd.Series(dates)).to_numpy()
     train_end = np.datetime64(pd.Timestamp(config.TRAIN_END))
     val_end = np.datetime64(pd.Timestamp(config.VAL_END))
     return np.where(d <= train_end, "train", np.where(d <= val_end, "val", "test"))
 
 
-# ---------------------------------------------------------------------------
-# Cleaning
-# ---------------------------------------------------------------------------
 def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """Return (clean daily table, log of what was done)."""
+    """Build the clean daily table and a log of every change."""
     log: dict = {}
     city = load_city(raw)
     log["city_rows_total"] = len(city)
@@ -60,7 +39,6 @@ def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     start, end = pd.Timestamp(config.START_DATE), pd.Timestamp(config.END_DATE)
     city = city[(city["Date"] >= start) & (city["Date"] <= end)]
 
-    # Re-index to a full calendar so any absent date would show up as a gap.
     calendar = pd.date_range(start, end, freq="D")
     keep = [config.TARGET] + list(config.POLLUTANT_FEATURES)
     df = city.set_index("Date")[keep].reindex(calendar)
@@ -68,7 +46,6 @@ def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     log["calendar_days"] = len(calendar)
     log["rows_present"] = int(city.shape[0])
 
-    # The target must be real everywhere.
     n_missing_target = int(df[config.TARGET].isna().sum())
     if n_missing_target:
         missing_days = df.index[df[config.TARGET].isna()].date.tolist()
@@ -78,7 +55,6 @@ def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "adjust START_DATE/END_DATE in src/config.py."
         )
 
-    # Forward-fill input gaps (past-only) and flag every filled cell.
     filled_log = {}
     for col in config.POLLUTANT_FEATURES:
         missing = df[col].isna()
@@ -95,8 +71,6 @@ def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     log["forward_filled"] = filled_log
     log["n_cells_filled"] = sum(len(v) for v in filled_log.values())
 
-    # Calendar features: position in the year as a point on a circle, so
-    # 31 December and 1 January are close together.
     doy = df.index.day_of_year.to_numpy()
     days_in_year = np.where(df.index.is_leap_year, 366, 365)
     angle = 2 * np.pi * (doy - 1) / days_in_year
@@ -113,12 +87,9 @@ def build_clean_series(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     return df, log
 
 
-# ---------------------------------------------------------------------------
-# Scaling (fit on training data only)
-# ---------------------------------------------------------------------------
 @dataclass
 class StandardScaler:
-    """z = (x - mean) / std, with mean and std learned from training rows only."""
+    """Scale columns with mean and spread learned from training rows only."""
 
     columns: list[str]
     mean: list[float]
@@ -126,40 +97,45 @@ class StandardScaler:
 
     @classmethod
     def fit(cls, df: pd.DataFrame, columns: list[str]) -> "StandardScaler":
+        """Learn the mean and spread from training rows."""
         values = df[columns].to_numpy(dtype=float)
         mean = values.mean(axis=0)
         std = values.std(axis=0)
-        std[std == 0] = 1.0  # a constant column would otherwise divide by zero
+        std[std == 0] = 1.0
         return cls(list(columns), mean.tolist(), std.tolist())
 
     def transform(self, df: pd.DataFrame) -> np.ndarray:
+        """Scale the given columns."""
         x = df[self.columns].to_numpy(dtype=float)
         return (x - np.asarray(self.mean)) / np.asarray(self.std)
 
     def inverse_column(self, z: np.ndarray, column: str) -> np.ndarray:
+        """Undo the scaling of one column."""
         i = self.columns.index(column)
         return np.asarray(z) * self.std[i] + self.mean[i]
 
     def scale_column(self, x: np.ndarray, column: str) -> np.ndarray:
+        """Scale one column."""
         i = self.columns.index(column)
         return (np.asarray(x) - self.mean[i]) / self.std[i]
 
     def to_json(self, path: Path) -> None:
+        """Save the scaler."""
         path.write_text(json.dumps(self.__dict__, indent=2))
 
     @classmethod
     def from_json(cls, path: Path) -> "StandardScaler":
+        """Load a saved scaler."""
         return cls(**json.loads(Path(path).read_text()))
 
 
 def fit_scaler(clean: pd.DataFrame) -> StandardScaler:
+    """Fit the scaler on training rows."""
     return StandardScaler.fit(clean[clean["split"] == "train"], feature_columns())
 
 
-# ---------------------------------------------------------------------------
-# Decision log
-# ---------------------------------------------------------------------------
 def write_decisions(log: dict, clean: pd.DataFrame) -> None:
+    """Write the preprocessing decisions report."""
     by_split = clean.groupby("split")["Date"].agg(["min", "max", "count"]).reindex(["train", "val", "test"])
     L = [
         "# Preprocessing Decisions",
@@ -214,8 +190,8 @@ def write_decisions(log: dict, clean: pd.DataFrame) -> None:
     config.DECISIONS_MD.write_text("\n".join(L), encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 def run_preprocessing(verbose: bool = True) -> tuple[pd.DataFrame, StandardScaler]:
+    """Run preprocessing and save the clean table and scaler."""
     raw = load_raw()
     clean, log = build_clean_series(raw)
     scaler = fit_scaler(clean)
@@ -238,6 +214,7 @@ def run_preprocessing(verbose: bool = True) -> tuple[pd.DataFrame, StandardScale
 
 
 def load_processed() -> pd.DataFrame:
+    """Load the saved clean table."""
     if not config.PROCESSED_CSV.exists():
         raise FileNotFoundError("Run `python main.py preprocess` first.")
     df = pd.read_csv(config.PROCESSED_CSV, parse_dates=["Date"])

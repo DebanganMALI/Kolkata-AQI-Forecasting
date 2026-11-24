@@ -1,14 +1,4 @@
-"""
-Train the LSTM variants and pick one using the VALIDATION period only.
-
-For every variant in config.VARIANTS and every seed in config.SEEDS:
-  1. train on the training period, stopping early when validation loss stops
-     improving (the best epoch's weights are kept);
-  2. save the checkpoint to models/experiment/<variant>_seed<seed>.pt;
-  3. record its validation MAE / RMSE / bias.
-Then the variant with the lowest mean validation MAE is written to
-models/selected_model.json. The test period is never touched here.
-"""
+"""Trains the LSTM variants on Kaggle data and picks one on the validation period only."""
 
 from __future__ import annotations
 
@@ -29,12 +19,14 @@ from src.preprocessing import StandardScaler, feature_columns, load_processed, r
 
 
 def set_seed(seed: int) -> None:
+    """Fix every random seed."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
 def _load_data(verbose: bool):
+    """Load or build the clean table and scaler."""
     if not config.PROCESSED_CSV.exists() or not config.SCALER_JSON.exists():
         run_preprocessing(verbose=verbose)
     clean = load_processed()
@@ -44,6 +36,7 @@ def _load_data(verbose: bool):
 
 @torch.no_grad()
 def _loss_on(model, loader, loss_fn, device) -> float:
+    """Average loss over a data loader."""
     model.eval()
     total, n = 0.0, 0
     for xb, yb in loader:
@@ -55,16 +48,18 @@ def _loss_on(model, loader, loss_fn, device) -> float:
 
 @torch.no_grad()
 def _forecast(model, X: np.ndarray, device) -> np.ndarray:
+    """Run a model on inputs."""
     model.eval()
     return model(torch.from_numpy(X).to(device)).cpu().numpy()
 
 
 def checkpoint_path(variant: str, seed: int):
+    """File path for a variant and seed."""
     return config.EXPERIMENT_DIR / f"{variant}_seed{seed}.pt"
 
 
 def train_one(variant: str, seed: int, windows, scaler, device) -> dict:
-    """Train one (variant, seed). Returns a row of validation results."""
+    """Train one variant with one seed and return its validation scores."""
     from src.evaluate import regression_metrics
 
     v = config.VARIANTS[variant]
@@ -75,7 +70,7 @@ def train_one(variant: str, seed: int, windows, scaler, device) -> dict:
     stats = target_stats(w_train, mode, scaler)
     y_train = encode_target(w_train.y_true, w_train.last_aqi, mode, stats)
     y_val = encode_target(w_val.y_true, w_val.last_aqi, mode, stats)
-    train_loader = to_loader(w_train.X, y_train, config.BATCH_SIZE, shuffle=True, seed=seed)  # shuffled within train only
+    train_loader = to_loader(w_train.X, y_train, config.BATCH_SIZE, shuffle=True, seed=seed)
     val_loader = to_loader(w_val.X, y_val, config.BATCH_SIZE, shuffle=False, seed=seed)
 
     model = AQILSTM(n_features=len(feature_columns()), hidden_size=v["hidden_size"],
@@ -109,7 +104,6 @@ def train_one(variant: str, seed: int, windows, scaler, device) -> dict:
         if bad_epochs >= config.PATIENCE:
             break
 
-    # validation forecast with the best weights, in real AQI units
     model.load_state_dict(best["state"])
     val_pred = decode_target(_forecast(model, w_val.X, device), w_val.last_aqi, mode, stats)
     m = regression_metrics(w_val.y_true, val_pred)
@@ -147,6 +141,7 @@ def train_one(variant: str, seed: int, windows, scaler, device) -> dict:
 
 
 def train_all(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
+    """Train every variant and seed, then pick the best on validation."""
     device = pick_device(device_name)
     windows, scaler = _load_data(verbose)
     if verbose:
@@ -194,6 +189,7 @@ def train_all(device_name: str = config.DEVICE, verbose: bool = True) -> dict:
 
 
 def _plot_histories(variant: str) -> None:
+    """Draw training curves for a variant."""
     try:
         import matplotlib
         matplotlib.use("Agg")
