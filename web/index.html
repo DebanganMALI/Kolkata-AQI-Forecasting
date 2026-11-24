@@ -132,6 +132,28 @@ th:first-child,td:first-child{text-align:left}
 th{font:500 11px "JetBrains Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);position:sticky;top:0;background:#1c1915}
 tr.click{cursor:pointer}tr.click:hover td{background:var(--panel2)}
 .tablewrap{overflow:auto;max-height:330px;margin-top:8px}
+/* How we built it: tabs, panes, equations and questions. */
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
+.tabs button{padding:9px 16px;border-radius:999px;background:var(--panel2,rgba(255,255,255,.06))}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.pane{display:none}.pane.on{display:block;animation:paneIn .35s ease}
+@keyframes paneIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card h3{font:600 20px/1.2 Fraunces,Georgia,serif;margin:6px 0 10px}
+.prose p,.prose li,.steps p{color:var(--ink2);margin:0 0 10px}
+.prose ul{margin:0;padding-left:18px}.prose li{margin-bottom:8px}.prose b{color:var(--ink)}
+table.txt td{text-align:left;vertical-align:top;color:var(--ink2)}table.txt td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+table.txt th{text-align:left}
+.eq{font:17px/1.5 "Cambria Math","STIX Two Math","Times New Roman",serif;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:9px 14px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+.eq sub,.eq sup{font-size:.72em}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.facts .v{font-size:30px}
+.qa{display:grid;gap:10px}
+.qa details{background:rgba(26,22,18,.74);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:4px 20px;backdrop-filter:blur(6px)}
+.qa summary{cursor:pointer;padding:14px 0;font:600 17px/1.3 Fraunces,Georgia,serif;list-style:none}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary::before{content:"+";display:inline-block;width:22px;color:var(--accent)}
+.qa details[open] summary::before{content:"\2212"}
+.qa details p{color:var(--ink2);margin:0 0 16px 22px}
 footer{padding:40px 0 64px;color:var(--ink2);font-size:14px;background:rgba(16,13,10,.6);border-top:1px solid rgba(255,255,255,.07)}
 footer a{color:var(--accent)}
 .modes{display:inline-flex;padding:3px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);gap:2px}
@@ -162,7 +184,7 @@ body.future .disc{display:block}
 
   <div class="topbar"><div class="wrap">
     <div class="brand">Kolkata AQI Forecast<small>Neural Networks and Deep Learning · IEM Kolkata</small></div>
-    <div class="row"><span class="toplink" id="nowPill" style="display:none"></span><a class="toplink" href="#ahead">The year ahead</a></div>
+    <div class="row"><span class="toplink" id="nowPill" style="display:none"></span><a class="toplink" href="#ahead">The year ahead</a><a class="toplink" href="#how">How we built it</a></div>
   </div></div>
 
   <div class="heroin"><div class="wrap">
@@ -267,6 +289,326 @@ body.future .disc{display:block}
       <div class="k">High-pollution days (actual AQI above 200)</div>
       <div class="tablewrap" style="max-height:clamp(360px,52vh,640px)"><table id="high"></table></div>
     </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How we built it</div>
+    <h2>From raw data to a forecast</h2>
+    <p class="sub">The project explained step by step: what it does, where the data comes from, which algorithms we used and why, the maths behind them, the hardware, and the results. Choose a tab.</p>
+
+    <div class="tabs" id="howTabs" role="tablist">
+      <button class="on" data-p="ov">Overview</button><button data-p="da">Data</button><button data-p="pi">Pipeline</button><button data-p="al">Algorithms</button><button data-p="ma">Maths</button><button data-p="re">Results</button><button data-p="hw">Hardware</button><button data-p="qa">Viva questions</button>
+    </div>
+
+    <!-- Overview: the problem and the type of learning. -->
+    <div class="pane on" id="p-ov">
+      <div class="grid g4 facts">
+        <div class="card"><div class="k">Days of official data</div><div class="v">2,953</div><div class="note">1 Oct 2018 to 31 Oct 2026</div></div>
+        <div class="card"><div class="k">Models compared</div><div class="v">24</div><div class="note">8 forecasters x 3 input sets</div></div>
+        <div class="card"><div class="k">Test days, scored once</div><div class="v">669</div><div class="note">1 Jan 2025 to 31 Oct 2026</div></div>
+        <div class="card"><div class="k">GRU vs persistence</div><div class="v">11.8 <small>vs 13.8 MAE</small></div><div class="note">14% lower error, significant</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card prose">
+          <h3>What is this project?</h3>
+          <p>Every winter Kolkata's air turns "Poor" or worse for weeks at a time. A forecast one day ahead gives people time to act: keep children indoors, skip a morning run, plan around the worst days.</p>
+          <p>We forecast <b>tomorrow's official AQI</b> (India's National AQI from CPCB, the 24-hour value published at 4 PM) from the <b>previous 14 days</b> of air-quality and weather data, and raise a <b>high-pollution alert</b> when the forecast is above 200 ("Poor" or worse).</p>
+          <p>We compared <b>eight forecasters</b>, from linear regression to Transformers, against the simplest forecast, <b>persistence</b> ("tomorrow will be like today"). A model only counts as better when a statistical test says so. The chosen model, a <b>GRU neural network</b>, now runs this website every day.</p>
+        </div>
+        <div class="card prose">
+          <h3>What kind of learning is this?</h3>
+          <ul>
+            <li><b>Supervised learning.</b> Every training example is a 14-day window of inputs labelled with the real AQI of the next day.</li>
+            <li><b>Regression, on a time series.</b> The output is a number (the AQI), and the inputs are ordered in time.</li>
+            <li><b>Quantile regression.</b> A second network predicts the 10th, 50th and 90th percentiles, which gives the 80% range.</li>
+            <li><b>Binary classification.</b> A GRU classifier gives the probability that tomorrow's AQI is above 200.</li>
+            <li><b>Offline (batch) training.</b> Models are trained on past data, then used. They do not keep learning while the site runs.</li>
+            <li><b>Deep learning.</b> Recurrent networks (GRU, LSTM), attention, temporal convolutions and Transformers, trained by backpropagation through time.</li>
+          </ul>
+          <p class="note">It is not unsupervised learning (there are labels) and not reinforcement learning (no agent or reward).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data: sources, cleaning and the split. -->
+    <div class="pane" id="p-da">
+      <div class="card">
+        <h3>Where the data comes from</h3>
+        <div class="tablewrap" style="max-height:none"><table class="txt">
+          <thead><tr><th>Source</th><th>What we took</th><th>Used as</th></tr></thead>
+          <tbody>
+            <tr><td>CPCB CCR portal, AQI repository</td><td>Official daily city AQI for Kolkata, 4 PM bulletin, 2018 to 2026</td><td>The forecast target</td></tr>
+            <tr><td>CPCB CCR portal, CAAQMS repository</td><td>24-hour readings of 11 pollutants (PM2.5, PM10, NO, NO2, NOx, NH3, CO, SO2, O3, benzene, toluene) from 7 WBPCB stations: Ballygunge, Bidhannagar, Fort William, Jadavpur, Rabindra Bharati University, Rabindra Sarobar, Victoria</td><td>Pollution inputs</td></tr>
+            <tr><td>Open-Meteo historical weather</td><td>12 daily variables for central Kolkata: temperature (mean, max, min), rain, rain hours, wind (max, mean, direction), sunlight, humidity, dew point, pressure</td><td>Weather inputs</td></tr>
+            <tr><td>NASA FIRMS, VIIRS S-NPP</td><td>Vegetation fire detections in 82 to 92 E, 20 to 28 N, summarised per day</td><td>Fire inputs</td></tr>
+            <tr><td>Festival calendar</td><td>Kali Puja, Durga Puja, Holi, New Year, and the 2020 lockdown</td><td>Event inputs</td></tr>
+            <tr><td>Kaggle, Air Quality Data in India</td><td>Kolkata rows of city_day.csv, 2018 to 2020</td><td>First stage of the project</td></tr>
+            <tr><td>CPCB daily bulletins, data.gov.in, Open-Meteo forecast</td><td>New official AQI each evening, live station sub-indices, tomorrow's weather</td><td>This website's live parts</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card prose">
+          <h3>Cleaning rules</h3>
+          <ul>
+            <li>The <b>target is never filled in</b>. The 4 days without an official AQI are never used as forecast targets.</li>
+            <li>Pollutant inputs are the <b>daily mean over the stations reporting</b> that day.</li>
+            <li>Input gaps of <b>at most 7 days</b> are carried forward and flagged. Longer gaps are not invented.</li>
+            <li>Boundary layer height was dropped: it is missing for January to June 2024, the validation year.</li>
+            <li>Low-confidence fires are dropped. We use the log count of fires within 300 km and the log fire power in the region.</li>
+            <li>Raw files are never modified. The tests check their bytes.</li>
+          </ul>
+        </div>
+        <div class="card prose">
+          <h3>Split by date, never at random</h3>
+          <dl>
+            <dt>Train</dt><dd>1 Oct 2018 to 31 Dec 2023 <span class="muted">· 1,918 days</span></dd>
+            <dt>Validation</dt><dd>all of 2024 <span class="muted">· 366 days</span></dd>
+            <dt>Test</dt><dd>1 Jan 2025 to 31 Oct 2026 <span class="muted">· 669 days</span></dd>
+          </dl>
+          <p style="margin-top:14px">Neighbouring days are very similar. A random split would put days from the "future" into training and make every model look better than it is. The scaler (mean and spread of each input) is also learned from the training years only.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline: the steps in order. -->
+    <div class="pane" id="p-pi">
+      <div class="steps">
+        <div class="card"><div class="k">Step 1</div><h3>Collect</h3><p>Download CPCB city AQI and the 7 station files, Open-Meteo weather, NASA fire detections and the festival calendar.</p></div>
+        <div class="card"><div class="k">Step 2</div><h3>One daily table</h3><p>Join everything by date into 2,953 rows, apply the cleaning rules and log every decision.</p></div>
+        <div class="card"><div class="k">Step 3</div><h3>14-day windows</h3><p>Each sample is the previous 14 days of inputs, labelled with the next day's AQI. Windows only look backwards.</p></div>
+        <div class="card"><div class="k">Step 4</div><h3>Split and scale</h3><p>Train, validation and test are blocks of dates. Scaling uses training statistics only.</p></div>
+        <div class="card"><div class="k">Step 5</div><h3>Train 24 models</h3><p>8 forecasters x 3 input sets (pollution; plus weather; plus fires and festivals). Neural networks use 3 seeds each.</p></div>
+        <div class="card"><div class="k">Step 6</div><h3>Choose on 2024</h3><p>The lowest mean validation error wins. All choices are saved to disk before the test years are touched.</p></div>
+        <div class="card"><div class="k">Step 7</div><h3>Test once</h3><p>Score 2025 to 2026 once, against persistence on the same days, with a 95% block-bootstrap interval.</p></div>
+        <div class="card"><div class="k">Step 8</div><h3>Walk forward</h3><p>Repeat the whole procedure with 2022, 2023 and 2024 as test years, each trained only on earlier data.</p></div>
+        <div class="card"><div class="k">Step 9</div><h3>Go live</h3><p>Every evening, a scheduled job reads CPCB's new bulletin and Open-Meteo's weather, the GRU rolls the outlook forward, and the site republishes.</p></div>
+      </div>
+    </div>
+
+    <!-- Algorithms: every forecaster, and why the GRU. -->
+    <div class="pane" id="p-al">
+      <div class="card">
+        <h3>The forecasters we compared</h3>
+        <div class="tablewrap" style="max-height:none"><table class="txt">
+          <thead><tr><th>Algorithm</th><th>Family</th><th>How it works</th><th>Why we used it</th></tr></thead>
+          <tbody>
+            <tr><td>Persistence</td><td>Baseline</td><td>Tomorrow's AQI = today's AQI</td><td>The bar every model must beat; hard to beat because air changes slowly</td></tr>
+            <tr><td>Ridge regression</td><td>Linear model</td><td>A weighted sum of all inputs, with an L2 penalty on the weights</td><td>The simplest learned model; shows whether deep learning is needed at all</td></tr>
+            <tr><td>Random forest</td><td>Tree ensemble (bagging)</td><td>Averages many decision trees, each trained on a bootstrap sample</td><td>Captures non-linear effects with no scaling and little tuning</td></tr>
+            <tr><td>XGBoost</td><td>Gradient-boosted trees</td><td>Adds trees one at a time, each correcting the errors of the ones before</td><td>The strongest classic method on tabular data</td></tr>
+            <tr><td><b>GRU</b></td><td>Recurrent neural network</td><td>Reads the 14 days in order and keeps a memory, controlled by an update gate and a reset gate</td><td>Built for sequences; fewer parameters than an LSTM, which suits about 2,000 training days</td></tr>
+            <tr><td>LSTM</td><td>Recurrent neural network</td><td>A memory cell with input, forget and output gates</td><td>The classic sequence model; strong long-range memory</td></tr>
+            <tr><td>Attention LSTM</td><td>RNN with attention</td><td>An LSTM that learns a weight for each of the 14 days</td><td>Interpretable: shows which past days the forecast relied on</td></tr>
+            <tr><td>TCN</td><td>Temporal convolutional network</td><td>Dilated 1-D convolutions that are causal (only look backwards)</td><td>A fast, parallel alternative to recurrent networks</td></tr>
+            <tr><td>Transformer</td><td>Self-attention</td><td>Every day in the window attends to every other day</td><td>The state of the art for sequences; tests whether attention alone is enough</td></tr>
+            <tr><td>Ensemble</td><td>Model averaging</td><td>The mean of the GRU, LSTM, Transformer and XGBoost forecasts</td><td>Different models make different errors, which partly cancel</td></tr>
+            <tr><td>Quantile attention LSTM</td><td>Quantile regression</td><td>Predicts the 10th, 50th and 90th percentiles with the pinball loss</td><td>Gives a range of likely values, not just one number</td></tr>
+            <tr><td>GRU classifier</td><td>Binary classification</td><td>Outputs the probability that tomorrow's AQI is above 200</td><td>A calibrated alert, with the threshold chosen on validation</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card prose">
+          <h3>Why the GRU was chosen</h3>
+          <ul>
+            <li><b>By rule, not by hindsight.</b> It had the lowest validation error on 2024 (MAE 12.9) of all 24 combinations, decided before the test years were seen.</li>
+            <li><b>Right size for the data.</b> Two gates instead of the LSTM's three means about 25% fewer weights, so less overfitting on 1,918 training days.</li>
+            <li><b>Small and fast.</b> 32 hidden units in one layer: it trains in seconds on the GPU and is light enough to run in plain NumPy for the live site.</li>
+            <li><b>Best alert.</b> On the test years it had the best high-pollution alert score (F1 0.723 vs 0.585 for persistence) and R² 0.919.</li>
+          </ul>
+          <p class="note">The LSTM (pollution only) scored lower on test (11.2), but picking it after seeing the test results would be cheating, so we report it without choosing it.</p>
+        </div>
+        <div class="card prose">
+          <h3>GRU training settings</h3>
+          <dl>
+            <dt>Input</dt><dd>14 days x (AQI, 11 pollutants, weather, day of year)</dd>
+            <dt>Hidden units, layers</dt><dd>32, 1</dd>
+            <dt>Dropout</dt><dd>0.2 before the output layer</dd>
+            <dt>Loss</dt><dd>Mean squared error</dd>
+            <dt>Optimiser</dt><dd>Adam, learning rate 0.001</dd>
+            <dt>Weight decay</dt><dd>0.00001</dd>
+            <dt>Batch size</dt><dd>32</dd>
+            <dt>Epochs</dt><dd>up to 200, early stopping after 20 without improvement</dd>
+            <dt>Gradient clipping</dt><dd>norm 1.0</dd>
+            <dt>Seeds</dt><dd>42, 43, 44, forecasts averaged</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maths: the equations. -->
+    <div class="pane" id="p-ma">
+      <div class="grid g2">
+        <div class="card prose">
+          <h3>The forecasting problem</h3>
+          <div class="eq">ŷ<sub>t+1</sub> = f<sub>θ</sub>(x<sub>t−13</sub>, x<sub>t−12</sub>, …, x<sub>t</sub>)</div>
+          <p>x<sub>t</sub> is the vector of inputs on day t, and θ the weights learned in training.</p>
+          <div class="eq">Persistence: &nbsp;ŷ<sub>t+1</sub> = y<sub>t</sub></div>
+          <div class="eq">Change mode: &nbsp;ŷ<sub>t+1</sub> = y<sub>t</sub> + Δ̂, &nbsp; where the model predicts Δ = y<sub>t+1</sub> − y<sub>t</sub></div>
+          <div class="eq">Scaling: &nbsp;x′ = (x − μ<sub>train</sub>) / σ<sub>train</sub></div>
+        </div>
+        <div class="card prose">
+          <h3>GRU cell (as in PyTorch)</h3>
+          <div class="eq">r<sub>t</sub> = σ(W<sub>r</sub>x<sub>t</sub> + U<sub>r</sub>h<sub>t−1</sub> + b<sub>r</sub>) &nbsp;&nbsp;<span class="muted">reset gate</span></div>
+          <div class="eq">z<sub>t</sub> = σ(W<sub>z</sub>x<sub>t</sub> + U<sub>z</sub>h<sub>t−1</sub> + b<sub>z</sub>) &nbsp;&nbsp;<span class="muted">update gate</span></div>
+          <div class="eq">n<sub>t</sub> = tanh(W<sub>n</sub>x<sub>t</sub> + r<sub>t</sub> ⊙ (U<sub>n</sub>h<sub>t−1</sub> + b<sub>hn</sub>) + b<sub>n</sub>)</div>
+          <div class="eq">h<sub>t</sub> = (1 − z<sub>t</sub>) ⊙ n<sub>t</sub> + z<sub>t</sub> ⊙ h<sub>t−1</sub></div>
+          <div class="eq">ŷ = wᵀ h<sub>14</sub> + b</div>
+          <p class="note">σ is the sigmoid and ⊙ element-wise multiplication. The term z<sub>t</sub> ⊙ h<sub>t−1</sub> is an additive path that lets memory and gradients pass through many days, which eases the vanishing gradient problem.</p>
+        </div>
+        <div class="card prose">
+          <h3>LSTM cell, for comparison</h3>
+          <div class="eq">f<sub>t</sub>, i<sub>t</sub>, o<sub>t</sub> = σ(W x<sub>t</sub> + U h<sub>t−1</sub> + b) &nbsp;&nbsp;<span class="muted">forget, input, output gates</span></div>
+          <div class="eq">c<sub>t</sub> = f<sub>t</sub> ⊙ c<sub>t−1</sub> + i<sub>t</sub> ⊙ tanh(W<sub>c</sub>x<sub>t</sub> + U<sub>c</sub>h<sub>t−1</sub> + b<sub>c</sub>)</div>
+          <div class="eq">h<sub>t</sub> = o<sub>t</sub> ⊙ tanh(c<sub>t</sub>)</div>
+          <p class="note">Four weight sets against the GRU's three: about 25% more parameters for the same hidden size.</p>
+        </div>
+        <div class="card prose">
+          <h3>Training: loss and optimiser</h3>
+          <div class="eq">L(θ) = (1/N) Σ<sub>i</sub> (y<sub>i</sub> − ŷ<sub>i</sub>)² + λ‖θ‖²</div>
+          <div class="eq">m<sub>t</sub> = β<sub>1</sub>m<sub>t−1</sub> + (1 − β<sub>1</sub>) g<sub>t</sub>, &nbsp; v<sub>t</sub> = β<sub>2</sub>v<sub>t−1</sub> + (1 − β<sub>2</sub>) g<sub>t</sub>²</div>
+          <div class="eq">θ ← θ − η · m̂<sub>t</sub> / (√v̂<sub>t</sub> + ε) &nbsp;&nbsp;<span class="muted">Adam, η = 0.001</span></div>
+          <p class="note">g<sub>t</sub> is the gradient from backpropagation through time; m̂ and v̂ are the bias-corrected averages. Gradients are clipped to norm 1.0.</p>
+        </div>
+        <div class="card prose">
+          <h3>Forecast range: pinball loss</h3>
+          <div class="eq">L<sub>τ</sub>(y, q) = max( τ(y − q), (τ − 1)(y − q) ), &nbsp; τ ∈ {0.1, 0.5, 0.9}</div>
+          <p>Under-forecasting costs τ per point and over-forecasting costs 1 − τ, so the minimiser is the τ-th percentile. The 10th and 90th percentiles give the 80% range. The network is built so the three can never cross.</p>
+        </div>
+        <div class="card prose">
+          <h3>How we score</h3>
+          <div class="eq">MAE = (1/N) Σ |y<sub>i</sub> − ŷ<sub>i</sub>| &nbsp;&nbsp; RMSE = √( (1/N) Σ (y<sub>i</sub> − ŷ<sub>i</sub>)² )</div>
+          <div class="eq">R² = 1 − Σ (y<sub>i</sub> − ŷ<sub>i</sub>)² / Σ (y<sub>i</sub> − ȳ)²</div>
+          <div class="eq">Precision = TP / (TP + FP), &nbsp; Recall = TP / (TP + FN), &nbsp; F1 = 2PR / (P + R)</div>
+          <div class="eq">Ensemble: &nbsp;ŷ = ¼ (ŷ<sub>GRU</sub> + ŷ<sub>LSTM</sub> + ŷ<sub>Transformer</sub> + ŷ<sub>XGBoost</sub>)</div>
+        </div>
+        <div class="card prose">
+          <h3>Is the difference real? Block bootstrap</h3>
+          <div class="eq">Δ = MAE<sub>model</sub> − MAE<sub>persistence</sub></div>
+          <p>The test days are resampled in blocks of 7 consecutive days, 2,000 times, and Δ is recomputed each time. The 2.5th to 97.5th percentiles give the 95% interval. Blocks keep the day-to-day correlation that a plain bootstrap would break. A model counts as better only if the whole interval is below zero.</p>
+        </div>
+        <div class="card prose">
+          <h3>How CPCB computes the AQI</h3>
+          <div class="eq">I<sub>p</sub> = (I<sub>hi</sub> − I<sub>lo</sub>) / (B<sub>hi</sub> − B<sub>lo</sub>) · (C<sub>p</sub> − B<sub>lo</sub>) + I<sub>lo</sub></div>
+          <div class="eq">AQI = max<sub>p</sub> I<sub>p</sub></div>
+          <p>C<sub>p</sub> is the 24-hour concentration of pollutant p, and B<sub>lo</sub>, B<sub>hi</sub> are the breakpoints of its band. At least 3 pollutants are needed, one of them PM2.5 or PM10. The live "Government AQI now" averages this over Kolkata's stations.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results: headline tables. -->
+    <div class="pane" id="p-re">
+      <div class="grid g4 facts">
+        <div class="card"><div class="k">Test MAE</div><div class="v">11.8 <small>vs 13.8</small></div><div class="note">GRU vs persistence, 669 days</div></div>
+        <div class="card"><div class="k">Difference [95%]</div><div class="v">−2.0 <small>[−3.2, −0.7]</small></div><div class="note">The whole interval is below zero</div></div>
+        <div class="card"><div class="k">Alert F1 (AQI above 200)</div><div class="v">0.723 <small>vs 0.585</small></div><div class="note">GRU vs persistence</div></div>
+        <div class="card"><div class="k">80% range coverage</div><div class="v">92%</div><div class="note">of test days fell inside the range</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card">
+          <h3>Walk-forward test: does it hold in other years?</h3>
+          <table><thead><tr><th>Test year</th><th>Persistence</th><th>GRU</th><th>Ensemble</th></tr></thead><tbody>
+            <tr><td>2022</td><td>18.6</td><td>14.6</td><td>14.2</td></tr>
+            <tr><td>2023</td><td>19.5</td><td>15.1</td><td>14.9</td></tr>
+            <tr><td>2024</td><td>17.0</td><td>13.4</td><td>13.1</td></tr>
+            <tr><td>2025 to 2026</td><td>13.8</td><td>11.8</td><td>10.9</td></tr>
+            <tr><td><b>All 1,764 days</b></td><td>baseline</td><td><b>−3.2</b> <span class="muted">[−4.0, −2.4]</span></td><td><b>−3.8</b> <span class="muted">[−4.5, −3.0]</span></td></tr>
+          </tbody></table>
+          <p class="note">MAE in AQI points. Both models beat persistence with 95% confidence in every year.</p>
+        </div>
+        <div class="card">
+          <h3>More data is what mattered</h3>
+          <table><thead><tr><th>Years of training data</th><th>Samples</th><th>Test MAE</th></tr></thead><tbody>
+            <tr><td>1</td><td>365</td><td>14.9 <span class="muted">(worse than persistence)</span></td></tr>
+            <tr><td>2</td><td>729</td><td>12.0</td></tr>
+            <tr><td>3</td><td>1,094</td><td>11.7</td></tr>
+            <tr><td>5</td><td>1,822</td><td>11.8</td></tr>
+          </tbody></table>
+          <p class="note">On the Kaggle data (747 days) plain ridge regression won. With four times more official data, the neural networks lead.</p>
+        </div>
+        <div class="card">
+          <h3>Forecasting further ahead</h3>
+          <table><thead><tr><th>Days ahead</th><th>Model MAE</th><th>Persistence</th><th>Difference [95%]</th></tr></thead><tbody>
+            <tr><td>1</td><td>11.8</td><td>13.8</td><td>−2.0 <span class="muted">[−3.2, −0.7]</span></td></tr>
+            <tr><td>3</td><td>19.9</td><td>22.2</td><td>−2.2 <span class="muted">[−4.3, −0.1]</span></td></tr>
+            <tr><td>7</td><td>22.4</td><td>25.2</td><td>−2.8 <span class="muted">[−6.0, −0.2]</span></td></tr>
+          </tbody></table>
+        </div>
+        <div class="card prose">
+          <h3>On this website, in the real world</h3>
+          <ul>
+            <li>The <b>live GRU</b> uses inputs available every evening (AQI, weather, day of year): test MAE 12.9 vs 13.8 for persistence.</li>
+            <li><b>1 to 24 November 2026</b>, against CPCB's real bulletins: day-ahead MAE <b>23.4</b> vs <b>28.1</b> for persistence. November is the hardest month, when winter pollution builds up quickly.</li>
+            <li>The <b>rolling outlook</b> beat the seasonal average at every horizon from 1 day to a year when back-tested on 2025 to 2026.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hardware and software. -->
+    <div class="pane" id="p-hw">
+      <div class="grid g2">
+        <div class="card prose">
+          <h3>Hardware</h3>
+          <dl>
+            <dt>Machine</dt><dd>Lenovo Legion Pro 7i Gen 10 laptop</dd>
+            <dt>GPU</dt><dd>NVIDIA GeForce RTX 5070 Ti, 12 GB</dd>
+            <dt>CPU</dt><dd>Intel Core Ultra 9</dd>
+            <dt>Memory</dt><dd>64 GB DDR5</dd>
+            <dt>Main experiment</dt><dd>about 36 min on the GPU</dd>
+            <dt>Walk-forward test</dt><dd>about 13 min</dd>
+          </dl>
+          <p style="margin-top:14px">Training runs in PyTorch's deterministic GPU mode, so the same machine gives the same numbers on every run. Everything also runs on a CPU, just slower.</p>
+        </div>
+        <div class="card prose">
+          <h3>Software</h3>
+          <dl>
+            <dt>Language</dt><dd>Python 3.13</dd>
+            <dt>Deep learning</dt><dd>PyTorch 2.15, CUDA 13.2</dd>
+            <dt>Classic models</dt><dd>scikit-learn, XGBoost</dd>
+            <dt>Data</dt><dd>pandas, NumPy</dd>
+            <dt>Figures</dt><dd>Matplotlib</dd>
+            <dt>Tests</dt><dd>unittest, research-rule checks</dd>
+          </dl>
+        </div>
+        <div class="card prose">
+          <h3>This website</h3>
+          <dl>
+            <dt>Page</dt><dd>HTML, CSS, JavaScript, Chart.js</dd>
+            <dt>Hosting</dt><dd>Cloudflare Pages</dd>
+            <dt>Live government AQI</dt><dd>Cloudflare function, data.gov.in API</dd>
+            <dt>Daily update</dt><dd>GitHub Actions, 5:45 PM every day</dd>
+            <dt>Model on the server</dt><dd>GRU weights exported to NumPy</dd>
+          </dl>
+        </div>
+        <div class="card prose">
+          <h3>Why a GPU?</h3>
+          <p>The main experiment trains 24 model combinations, most with 3 seeds, plus learning curves, multi-day horizons and four walk-forward rounds: hundreds of networks. The GPU runs the matrix operations of each training batch in parallel, which made the whole study take minutes instead of hours. For a single forecast the GRU is tiny, so the live site needs no GPU.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questions a reviewer is likely to ask. -->
+    <div class="pane" id="p-qa">
+      <div class="qa">
+        <details open><summary>Why not split the data at random?</summary><p>Neighbouring days are very similar, so a random split lets the model see days around each test day during training. That leaks the future and inflates the score. We split by date: train up to 2023, validate on 2024, test on 2025 to 2026.</p></details>
+        <details><summary>Why compare against persistence?</summary><p>Air quality changes slowly, so "tomorrow equals today" is already a strong forecast. A model is only useful if it beats this free forecast, and we only claim it does when the 95% interval of the difference is entirely below zero.</p></details>
+        <details><summary>Why a GRU and not an LSTM?</summary><p>We did not pick by taste. Every model was scored on the 2024 validation year and the GRU had the lowest error. It also has two gates instead of three, about 25% fewer weights, which helps with only about 2,000 training days.</p></details>
+        <details><summary>How did you prevent overfitting?</summary><p>A small model (32 units, 1 layer), dropout 0.2, weight decay, early stopping on validation loss (patience 20), gradient clipping, choosing settings on validation only, and averaging 3 seeds.</p></details>
+        <details><summary>What does MAE 11.8 mean?</summary><p>On an average test day the forecast was 11.8 AQI points away from the official value. Persistence was 13.8 points away, so the GRU's error is about 14% lower.</p></details>
+        <details><summary>What is the vanishing gradient problem, and how does the GRU help?</summary><p>In a plain RNN the gradient is multiplied by the same weights at every time step, so it shrinks towards zero and the network forgets early days. The GRU's update gate gives an additive path, h<sub>t</sub> = (1 − z)·n + z·h<sub>t−1</sub>, so information and gradients can flow across many days.</p></details>
+        <details><summary>What is backpropagation through time?</summary><p>The network is unrolled over the 14 days like a 14-layer network with shared weights. The loss gradient is passed back through every day, and the gradients for the shared weights are added up.</p></details>
+        <details><summary>Why 14 days of history?</summary><p>It was fixed before any experiment. Two weeks covers two weekly cycles and the multi-day weather spells (calm, dry, cold air) that trap pollution in Kolkata's winter.</p></details>
+        <details><summary>Did weather, fires and festivals help?</summary><p>A little for the GRU (12.2 to 11.8), but for most models the difference was not statistically clear. Yesterday's AQI already carries much of the weather's effect.</p></details>
+        <details><summary>Why use several seeds?</summary><p>A neural network's result depends on its random starting weights. Training with seeds 42, 43 and 44 and averaging makes the forecast stable, and shows that a result is not luck.</p></details>
+        <details><summary>Why is the error in November 2026 (23.4) higher than on the test years (11.8)?</summary><p>November is when pollution rises fastest, so every method does worse: persistence was 28.1 over the same days. The live model also uses fewer inputs, because station pollutant files are not available every evening.</p></details>
+        <details><summary>Why does this site show a different AQI from weather apps?</summary><p>We use India's National AQI from CPCB: a 24-hour average with Indian breakpoints. Many apps show the US AQI or an hourly reading, which uses a different formula and time window, so they give different numbers for the same air.</p></details>
+        <details><summary>What are the limitations?</summary><p>The test years have cleaner air than most training years. Settings were chosen once, on 2024, and reused in every walk-forward round. Weather and fires show associations, not causes. Only two stations reported in 2018.</p></details>
+      </div>
     </div>
   </div>
 </section>
@@ -517,6 +859,10 @@ function highTable(){
  if(window.ResizeObserver)new ResizeObserver(()=>{if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px");dist=Math.max(ph*.9,innerHeight*.55)}}).observe(g);
  addEventListener("resize",fit);addEventListener("scroll",kick,{passive:true});fit();
  if(document.fonts)document.fonts.ready.then(fit);}
+// Switch between the tabs of the "How we built it" section.
+document.querySelectorAll("#howTabs button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#howTabs button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll("#how .pane").forEach(p=>p.classList.toggle("on",p.id==="p-"+b.dataset.p));});
 // Blur and darken the painting as the page scrolls.
 {let tick=false;const upd=()=>{root.style.setProperty("--s",Math.min(1,scrollY/(innerHeight*.6)).toFixed(3));tick=false};
  addEventListener("scroll",()=>{if(!tick){tick=true;requestAnimationFrame(upd)}},{passive:true});upd();}
