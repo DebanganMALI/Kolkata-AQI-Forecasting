@@ -62,7 +62,7 @@ h2{font:600 clamp(24px,3.2vw,34px)/1.12 Fraunces,Georgia,serif;margin:10px 0 8px
 .topbar .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .brand{font:700 18px Fraunces,Georgia,serif;letter-spacing:-.01em;text-shadow:0 1px 10px rgba(0,0,0,.45)}
 .brand small{display:block;font:500 10px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:#ffd9a8;margin-top:2px}
-.toplink{font:500 13px Inter,sans-serif;color:var(--ink);text-decoration:none;padding:8px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(20,16,12,.35);backdrop-filter:blur(6px)}
+.toplink{display:inline-flex;align-items:center;font:500 13px Inter,sans-serif;color:var(--ink);text-decoration:none;padding:8px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(20,16,12,.35);backdrop-filter:blur(6px)}
 
 .heroin{position:relative;z-index:3;padding-bottom:34px}
 .glass{background:rgba(20,16,12,.58);border:1px solid rgba(255,255,255,.14);border-radius:18px;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
@@ -156,7 +156,7 @@ body.future .disc{display:block}
 
   <div class="topbar"><div class="wrap narrow">
     <div class="brand">Kolkata AQI Forecast<small>Neural Networks and Deep Learning · IEM Kolkata</small></div>
-    <a class="toplink" href="#ahead">The year ahead</a>
+    <div class="row"><span class="toplink" id="nowPill" style="display:none"></span><a class="toplink" href="#ahead">The year ahead</a></div>
   </div></div>
 
   <div class="heroin"><div class="wrap narrow">
@@ -287,7 +287,7 @@ const mae=(a,b)=>a.reduce((s,_,i)=>s+Math.abs(a[i]-b[i]),0)/a.length;
 const $=id=>document.getElementById(id);
 const COMPASS=["N","NE","E","SE","S","SW","W","NW"];
 
-let days=[],fut=[],O=null,mode="test",idx=0,fidx=0,chart,fchart,view="all";
+let NOW=null,days=[],fut=[],O=null,mode="test",idx=0,fidx=0,chart,fchart,view="all";
 const list=()=>mode==="test"?days:fut;
 
 /* air -> scene: 0 at AQI 50 or below, 1 at AQI 260 or above */
@@ -369,7 +369,9 @@ function showFuture(d){
   $("hChip").innerHTML=chip(d.aqi)+`<span class="tag">Outlook · not live data</span>`;
   $("hGru").textContent=`${n0(d.low)}–${n0(d.high)}`;$("hGru").nextElementSibling.textContent="80% range";
   $("hEns").textContent=`±${n0(d.mae)}`;$("hEns").nextElementSibling.textContent="Typical error";
-  $("hErr").textContent=d.h;$("hErr").nextElementSibling.textContent=`Day${d.h>1?"s":""} past real data`;
+  const today=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
+  if(NOW&&d.date===today){$("hErr").textContent=n0(NOW.aqi);$("hErr").nextElementSibling.textContent="Government AQI right now";}
+  else{$("hErr").textContent=d.h;$("hErr").nextElementSibling.textContent=`Day${d.h>1?"s":""} past real data`;}
   $("disc").innerHTML=`<strong>Outlook, not live data.</strong> Forecast by the GRU from official CPCB data ${short(O.data_from)} to ${short(O.data_to)} (daily bulletins after ${short(O.main_data_to)}), rolled forward ${d.h} day${d.h>1?"s":""} using ${d.h<=15?"Open-Meteo's weather forecast":"the average weather for each date"}. When tested the same way on 2025–26, it was typically off by ±${n0(d.mae)} AQI at this distance.`;
 
   $("dTitle").textContent=fmt(d.date);
@@ -480,7 +482,14 @@ function highTable(){
  addEventListener("scroll",()=>{if(!tick){tick=true;requestAnimationFrame(upd)}},{passive:true});upd();}
 (async()=>{
   const get=async p=>{try{const r=await fetch(p,{cache:"no-store"});return r.ok?r.json():null}catch(e){return null}};
-  const [T,F]=await Promise.all([get("data/test.json"),get("data/outlook.json")]);
+  const [T,F,L,S]=await Promise.all([get("data/test.json"),get("data/outlook.json"),get("api/now"),get("data/now.json")]);
+  const N=(L&&L.aqi!=null)?L:S;          // live (Cloudflare function) first, else the last saved reading
+  NOW=N&&N.aqi!=null&&Date.now()-new Date(N.fetched).getTime()<36*3600e3?N:null;
+  if(NOW){
+    const p=$("nowPill");p.style.display="";
+    p.innerHTML=`Government AQI now <b style="margin-left:6px">${n0(N.aqi)}</b> <span style="color:${css(cat(N.aqi)[2])};margin-left:6px">${cat(N.aqi)[1]}</span>`;
+    p.title=`CPCB live station feed (data.gov.in), ${N.stations} stations, ${N.feed_time}. Indian AQI.`;
+  }
   if(!T){$("hDate").textContent="Could not load data/test.json";return}
   days=T.days;
   if(F){O=F;fut=[...(F.recent||[]),...F.days]}else{$("mFut").style.display="none";$("ahead").style.display="none"}

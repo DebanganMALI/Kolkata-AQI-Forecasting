@@ -7,7 +7,13 @@ Daily live update for the website (run by GitHub Actions at 17:45 IST, or by han
    missing since the last one saved, up to today.
 2. Reads Kolkata's official city AQI from them (scripts/read_bulletins.py).
 3. Downloads recent real weather + the 16-day forecast from Open-Meteo.
-4. Rebuilds the outlook (scripts/build_outlook.py): the newest official value
+4. If DATA_GOV_API_KEY is set and data.gov.in is reachable (it answers from
+   India, not from GitHub's US servers), reads CPCB's live station feed and
+   computes the government AQI right now: each station's AQI is its highest
+   pollutant sub-index, the city value is the mean over stations (CPCB method;
+   on 24 Nov 2026 the feed gave 67 against the official 63). Saved to
+   web/data/now.json for the website.
+5. Rebuilds the outlook (scripts/build_outlook.py): the newest official value
    becomes the starting point, so "tomorrow" is always a one-day-ahead forecast.
 
 Note on cpcb.nic.in: its HTTPS certificate had expired (Nov 2026), so the
@@ -19,6 +25,8 @@ station count) before use.
 from __future__ import annotations
 
 import csv
+import json
+import os
 import ssl
 import sys
 import urllib.parse
@@ -84,6 +92,32 @@ def download_weather() -> None:
     print("  weather updated (31 past days + 16-day forecast)")
 
 
+NOW_JSON = ROOT / "web" / "data" / "now.json"
+FEED = "https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69"
+
+
+def government_now() -> None:
+    key = os.environ.get("DATA_GOV_API_KEY")
+    if not key:
+        print("  DATA_GOV_API_KEY not set - skipped")
+        return
+    from live_forecast import city_aqi_from_records
+    q = urllib.parse.urlencode({"api-key": key, "format": "json", "limit": 500, "filters[city]": "Kolkata"})
+    try:
+        records = json.loads(fetch(f"{FEED}?{q}"))["records"]
+    except Exception as e:                             # noqa: BLE001
+        print(f"  live feed not reachable from here: {e}")
+        return
+    aqi, n = city_aqi_from_records(records)
+    if aqi is None:
+        print("  live feed had no usable Kolkata readings")
+        return
+    stamp = max(r.get("last_update", "") for r in records)
+    NOW_JSON.write_text(json.dumps({"aqi": aqi, "stations": n, "feed_time": stamp,
+                                    "fetched": datetime.now(IST).isoformat(timespec="minutes")}))
+    print(f"  government AQI right now: {aqi:.0f} from {n} stations (feed time {stamp})")
+
+
 def main() -> None:
     print("1. CPCB bulletins")
     download_bulletins()
@@ -95,7 +129,9 @@ def main() -> None:
         print(f"   latest official AQI: {rows[-1]['aqi']} ({rows[-1]['category']}) on {rows[-1]['date']}")
     print("3. Weather")
     download_weather()
-    print("4. Outlook")
+    print("4. Government AQI right now (data.gov.in live feed)")
+    government_now()
+    print("5. Outlook")
     build_outlook.main()
 
 
