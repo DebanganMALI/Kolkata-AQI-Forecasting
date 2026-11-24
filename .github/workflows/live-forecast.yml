@@ -48,3 +48,10 @@ jobs:
             git commit -m "Live update $(TZ=Asia/Kolkata date +%Y-%m-%d)"
             git push
           fi
+
+      # Tell Cloudflare Pages to publish the latest version of the website.
+      - name: Redeploy website
+        env:
+          CF_DEPLOY_HOOK: ${{ secrets.CF_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$CF_DEPLOY_HOOK" ]; then curl -s -X POST "$CF_DEPLOY_HOOK"; else echo "CF_DEPLOY_HOOK not set"; fi
