@@ -68,6 +68,7 @@ h2{font:600 clamp(24px,3.2vw,34px)/1.12 Fraunces,Georgia,serif;margin:10px 0 8px
 .toplink{display:inline-flex;align-items:center;font:500 15px Inter,sans-serif;color:var(--ink);text-decoration:none;padding:10px 18px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(20,16,12,.35);backdrop-filter:blur(6px)}
 
 .heroin{position:relative;z-index:3;padding-bottom:0}
+.heroin .glass{margin-left:calc(var(--inset,0px)*(1 - var(--e,0)))}
 .glass{background:rgba(20,16,12,.58);border:1px solid rgba(255,255,255,.14);border-radius:18px;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
 .readout{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center;padding:18px 22px}
 .big{font:700 clamp(54px,8vw,92px)/.9 Fraunces,Georgia,serif;letter-spacing:-.03em}
@@ -497,9 +498,15 @@ function highTable(){
   document.querySelectorAll("#high tr.click").forEach(r=>r.onclick=()=>pickDate(r.dataset.d));
 }
 
-// Keep half of the hero panel below the fold by tracking its height.
-{const g=document.querySelector(".heroin .glass");const fit=()=>root.style.setProperty("--ph",g.offsetHeight+"px");
- if(window.ResizeObserver)new ResizeObserver(fit).observe(g);addEventListener("resize",fit);fit();}
+// Start the hero panel beside the tea table, half below the fold, and widen it as the page scrolls.
+{const g=document.querySelector(".heroin .glass"),st=document.querySelector(".stage"),TABLE=.22;
+ let ph=300;
+ const inset=()=>{if(innerWidth<=780)return 0;const r=st.getBoundingClientRect(),w=g.parentElement.getBoundingClientRect();
+   return Math.max(0,r.left+r.width*TABLE-w.left-parseFloat(getComputedStyle(g.parentElement).paddingLeft))};
+ const grow=()=>root.style.setProperty("--e",Math.min(1,scrollY/Math.max(1,ph*.5)).toFixed(3));
+ const fit=()=>{root.style.setProperty("--inset",inset()+"px");if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px")}grow()};
+ if(window.ResizeObserver)new ResizeObserver(fit).observe(g);addEventListener("resize",fit);
+ addEventListener("scroll",()=>requestAnimationFrame(grow),{passive:true});fit();}
 // Blur and darken the painting as the page scrolls.
 {let tick=false;const upd=()=>{root.style.setProperty("--s",Math.min(1,scrollY/(innerHeight*.6)).toFixed(3));tick=false};
  addEventListener("scroll",()=>{if(!tick){tick=true;requestAnimationFrame(upd)}},{passive:true});upd();}
