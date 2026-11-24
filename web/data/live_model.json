@@ -1,0 +1,20 @@
+{
+  "model": "GRU (1 x 32), change target, average of 3 seeds",
+  "inputs": "past 14 days of city AQI + 13 weather variables + day of year",
+  "test_period": "2025-01-01 to 2026-10-31",
+  "test_days": 669,
+  "mae": 12.9,
+  "rmse": 18.8,
+  "r2": 0.893,
+  "persistence_mae": 13.8,
+  "diff": -0.9,
+  "diff_low": -1.6,
+  "diff_high": -0.2,
+  "range_coverage": 0.855,
+  "alert_f1": 0.638,
+  "persistence_alert_f1": 0.585,
+  "validation": {
+    "level": 15.87,
+    "change": 15.77
+  }
+}
