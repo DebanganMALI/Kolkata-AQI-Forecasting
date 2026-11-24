@@ -70,7 +70,8 @@ h2{font:600 clamp(24px,3.2vw,34px)/1.12 Fraunces,Georgia,serif;margin:10px 0 8px
 .heroin{position:relative;z-index:3;padding-bottom:0}
 .heroin .glass{margin-left:calc(var(--inset,0px)*(1 - var(--e,0)))}
 .heroin .glass{container-type:inline-size}
-@container (max-width:1150px){.readout{grid-template-columns:auto 1fr}.readout .controls{grid-column:1/-1;justify-content:flex-start}}
+.heroin.slide .readout{grid-template-columns:auto 1fr}.heroin.slide .readout .controls{grid-column:1/-1;justify-content:flex-start}
+.heroin.slide{padding-top:calc(100svh - var(--ph,300px)*.5)}.hero:has(.heroin.slide){display:block;min-height:0}
 .glass{background:rgba(20,16,12,.58);border:1px solid rgba(255,255,255,.14);border-radius:18px;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
 .readout{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center;padding:18px 22px}
 .big{font:700 clamp(54px,8vw,92px)/.9 Fraunces,Georgia,serif;letter-spacing:-.03em}
@@ -500,16 +501,22 @@ function highTable(){
   document.querySelectorAll("#high tr.click").forEach(r=>r.onclick=()=>pickDate(r.dataset.d));
 }
 
-// Start the hero panel beside the tea table, half below the fold, and widen it as the page scrolls.
-{const g=document.querySelector(".heroin .glass"),st=document.querySelector(".stage"),TABLE=.39,GAP=56,MINW=760;
- let ph=300;
+// Start the hero panel beside the tea table, half below the fold, and widen it smoothly as the page scrolls.
+{const box=document.querySelector(".heroin"),g=box.querySelector(".glass"),st=document.querySelector(".stage"),TABLE=.39,GAP=56,MINW=760;
+ const calm=matchMedia("(prefers-reduced-motion:reduce)").matches;let ph=300,dist=400,cur=0,goal=0,run=false,last=0;
  const inset=()=>{if(innerWidth<=780)return 0;const r=st.getBoundingClientRect(),w=g.parentElement.getBoundingClientRect();
    const pad=parseFloat(getComputedStyle(g.parentElement).paddingLeft),room=w.width-2*pad;
    return Math.max(0,Math.min(room-MINW,r.left+r.width*TABLE+GAP-w.left-pad))};
- const grow=()=>root.style.setProperty("--e",Math.min(1,scrollY/Math.max(1,ph*.5)).toFixed(3));
- const fit=()=>{root.style.setProperty("--inset",inset()+"px");if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px")}grow()};
- if(window.ResizeObserver)new ResizeObserver(fit).observe(g);addEventListener("resize",fit);
- addEventListener("scroll",()=>requestAnimationFrame(grow),{passive:true});fit();}
+ const ease=t=>t*t*(3-2*t);
+ const target=()=>{goal=ease(Math.min(1,Math.max(0,scrollY/dist)))};
+ const step=now=>{const dt=Math.min(64,now-(last||now));last=now;cur+=(goal-cur)*(calm?1:1-Math.exp(-dt/220));if(Math.abs(goal-cur)<.001)cur=goal;
+   root.style.setProperty("--e",cur.toFixed(4));run=cur!==goal;if(run)requestAnimationFrame(step);else last=0};
+ const kick=()=>{target();if(!run){run=true;requestAnimationFrame(step)}};
+ const fit=()=>{const x=inset();box.classList.toggle("slide",x>0);root.style.setProperty("--inset",x+"px");
+   if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px")}dist=Math.max(ph*.9,innerHeight*.55);kick()};
+ if(window.ResizeObserver)new ResizeObserver(()=>{if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px");dist=Math.max(ph*.9,innerHeight*.55)}}).observe(g);
+ addEventListener("resize",fit);addEventListener("scroll",kick,{passive:true});fit();
+ if(document.fonts)document.fonts.ready.then(fit);}
 // Blur and darken the painting as the page scrolls.
 {let tick=false;const upd=()=>{root.style.setProperty("--s",Math.min(1,scrollY/(innerHeight*.6)).toFixed(3));tick=false};
  addEventListener("scroll",()=>{if(!tick){tick=true;requestAnimationFrame(upd)}},{passive:true});upd();}
