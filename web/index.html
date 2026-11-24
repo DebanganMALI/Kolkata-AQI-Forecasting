@@ -69,6 +69,8 @@ h2{font:600 clamp(24px,3.2vw,34px)/1.12 Fraunces,Georgia,serif;margin:10px 0 8px
 
 .heroin{position:relative;z-index:3;padding-bottom:0}
 .heroin .glass{margin-left:calc(var(--inset,0px)*(1 - var(--e,0)))}
+.heroin .glass{container-type:inline-size}
+@container (max-width:1150px){.readout{grid-template-columns:auto 1fr}.readout .controls{grid-column:1/-1;justify-content:flex-start}}
 .glass{background:rgba(20,16,12,.58);border:1px solid rgba(255,255,255,.14);border-radius:18px;backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
 .readout{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center;padding:18px 22px}
 .big{font:700 clamp(54px,8vw,92px)/.9 Fraunces,Georgia,serif;letter-spacing:-.03em}
@@ -499,10 +501,11 @@ function highTable(){
 }
 
 // Start the hero panel beside the tea table, half below the fold, and widen it as the page scrolls.
-{const g=document.querySelector(".heroin .glass"),st=document.querySelector(".stage"),TABLE=.22;
+{const g=document.querySelector(".heroin .glass"),st=document.querySelector(".stage"),TABLE=.39,GAP=56,MINW=760;
  let ph=300;
  const inset=()=>{if(innerWidth<=780)return 0;const r=st.getBoundingClientRect(),w=g.parentElement.getBoundingClientRect();
-   return Math.max(0,r.left+r.width*TABLE-w.left-parseFloat(getComputedStyle(g.parentElement).paddingLeft))};
+   const pad=parseFloat(getComputedStyle(g.parentElement).paddingLeft),room=w.width-2*pad;
+   return Math.max(0,Math.min(room-MINW,r.left+r.width*TABLE+GAP-w.left-pad))};
  const grow=()=>root.style.setProperty("--e",Math.min(1,scrollY/Math.max(1,ph*.5)).toFixed(3));
  const fit=()=>{root.style.setProperty("--inset",inset()+"px");if(scrollY<5){ph=g.offsetHeight;root.style.setProperty("--ph",ph+"px")}grow()};
  if(window.ResizeObserver)new ResizeObserver(fit).observe(g);addEventListener("resize",fit);
