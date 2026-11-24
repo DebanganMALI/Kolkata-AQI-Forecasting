@@ -6,9 +6,12 @@
 
 **Forecast tomorrow's Air Quality Index for Kolkata with deep learning, and measure it honestly.**
 
+**Live website: [kolkata-aqi-forecasting.pages.dev](https://kolkata-aqi-forecasting.pages.dev)**
+
 [![Python](https://img.shields.io/badge/python-3.13%2B-3776ab.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.15%20%7C%20CUDA%2013.2-ee4c2c.svg)](https://pytorch.org/)
-[![Tests](https://img.shields.io/badge/tests-43%20passing-2ea44f.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-47%20passing-2ea44f.svg)](tests)
+[![Website](https://img.shields.io/badge/website-live-f0a04b.svg)](https://kolkata-aqi-forecasting.pages.dev)
 [![Data](https://img.shields.io/badge/data-CPCB%20%C2%B7%20Open--Meteo%20%C2%B7%20NASA%20FIRMS-6e6e6e.svg)](#data)
 [![Course](https://img.shields.io/badge/course-PCCCS582%20Neural%20Networks%20%26%20Deep%20Learning-6e6e6e.svg)](#about)
 
@@ -34,6 +37,8 @@ It was built in two stages:
 2. **Official data, 2018 to 2026** (2,953 days), collected from the Central Pollution Control
    Board, Open-Meteo and NASA. With four times more data, **deep learning clearly wins**, and a
    learning curve shows exactly how much data it needed.
+3. **A live website** that runs the GRU every day on CPCB's newest bulletin and compares its
+   forecasts with the real AQI, next to the government's live AQI.
 
 ---
 
@@ -86,6 +91,37 @@ Full tables: [`reports/extended_results.md`](reports/extended_results.md).
 
 ---
 
+## Live website
+
+**[kolkata-aqi-forecasting.pages.dev](https://kolkata-aqi-forecasting.pages.dev)** shows the model
+at work on one page, over a painting of Kolkata whose haze and sun follow the AQI.
+
+- **Tested days:** pick any of the 669 test days and see the real AQI next to the GRU, the
+  ensemble and persistence, with the 80% range, the weather that day and the same date in past years.
+- **Future outlook:** the GRU's forecast for tomorrow, rolled forward day by day to the end of
+  2027, with an honest error margin for each distance. Tomorrow uses Open-Meteo's weather
+  forecast; later days use the average weather for that date.
+- **Government AQI now:** the live city AQI from CPCB's real-time feed (data.gov.in), computed
+  the same way as the official bulletin.
+- **How we built it:** the data, algorithms, equations, hardware, results and common viva
+  questions, in tabs.
+
+**How it stays up to date.** A GitHub Actions job runs every evening at 5:45 PM IST
+([`.github/workflows/live-forecast.yml`](.github/workflows/live-forecast.yml)). It downloads
+CPCB's daily bulletin and the latest weather, reads the official AQI from the bulletin, rolls the
+outlook forward with the GRU, commits the new data and tells Cloudflare Pages to republish.
+
+**The live model** is a GRU trained on the inputs available every evening (AQI, 12 weather
+variables and the day of year), predicting the change from today. Test MAE 12.9 vs 13.8 for
+persistence; its 80% range held the real AQI on 86% of test days. The weights are exported to
+NumPy, so the daily job needs no GPU.
+
+**Real-world check, 1 to 24 November 2026**, against CPCB's real bulletins: day-ahead MAE
+**23.4** vs **28.1** for persistence. November is the hardest month, when winter pollution
+builds up fastest.
+
+---
+
 ## Features
 
 - **Eight forecasters, one fair contest**: ridge regression, random forest, XGBoost, GRU, LSTM,
@@ -104,7 +140,7 @@ Full tables: [`reports/extended_results.md`](reports/extended_results.md).
   **probability of a high-pollution day**.
 - **Runs on an NVIDIA GPU** in deterministic mode, so the same machine gives the same numbers
   every run; falls back to CPU automatically.
-- **43 automated checks** for the research rules: no future data in any input, the target never
+- **47 automated checks** for the research rules: no future data in any input, the target never
   filled in, train-only scaling, causal convolutions, and more.
 
 ---
@@ -220,7 +256,7 @@ refuses to activate the environment, run
 ## Usage
 
 ```powershell
-python -m unittest discover -s tests -v    # 43 research-rule checks
+python -m unittest discover -s tests -v    # 47 research-rule checks
 
 python main.py extended                    # headline experiment, about 35 min on an RTX 5070 Ti
 python main.py robust                      # walk-forward over 4 test years, about 13 min (run after extended)
@@ -229,6 +265,11 @@ python main.py all                         # Kaggle pipeline: audit -> preproces
 python main.py compare                     # 5 forecasters, with and without weather
 python main.py advanced                    # attention LSTM, TCN, Transformer, forecast ranges
 python main.py predict --date 2020-01-15   # one forecast with its alert, compared with the real AQI
+
+python main.py live-train                  # train the website's GRU and export it to NumPy
+python scripts/demo.py                     # live classroom demo: train on the GPU, score the test days, forecast tomorrow
+python scripts/demo.py --fast              # the same, without pauses between steps
+python scripts/update_live.py              # the daily website update (set DATA_GOV_API_KEY for the live AQI)
 ```
 
 Add `--device cpu` to any command to force the CPU. The default, `--device auto`, uses the GPU
@@ -251,6 +292,7 @@ Example forecast:
 ```text
 data/
   raw/                 original files, never modified (Kaggle, CPCB city AQI + stations, NASA FIRMS)
+  live/                CPCB daily bulletins, the AQI read from them, recent weather (updated daily)
   external/            Open-Meteo weather
   interim/             CPCB city AQI as one table, daily fire summary
   processed/           cleaned tables built by the code
@@ -271,7 +313,18 @@ src/
   robust.py            walk-forward rounds, ensemble, spike-weighted GRU, alert probability
   weather.py           Open-Meteo reader
   predict.py           single-day forecast and alert
-tests/                 43 checks for the research rules
+  live_model.py        trains the website's GRU and exports its weights to NumPy
+scripts/
+  update_live.py       daily job: bulletins, weather, live AQI, new outlook
+  read_bulletins.py    reads the official AQI from CPCB's bulletin PDFs
+  build_outlook.py     rolls the GRU forward into the future outlook
+  build_site_data.py   test-day results for the website
+  live_forecast.py     helpers: GRU in NumPy, city AQI from station sub-indices
+  demo.py              step-by-step GPU demo for presentations
+  upscale_art.py       prepares the website painting
+web/                   the website: index.html, painting, data files, Cloudflare function for live AQI
+.github/workflows/     the daily update job
+tests/                 47 checks for the research rules
 main.py                command-line entry point
 ```
 
@@ -301,7 +354,9 @@ The tests check the rules that keep the results honest:
 - The extended test years (2025-2026) have cleaner air than most training years.
 - Only two stations reported in 2018, so the earliest city pollutant averages rest on fewer readings.
 - Weather is reanalysis and fires are satellite detections: they show associations, not causes.
-- Only past weather is used. A live system could add tomorrow's weather forecast.
+- The research experiments use only past weather. The live website adds Open-Meteo's forecast for
+  tomorrow, but its longer outlook uses average weather for each date, so it shows the seasonal
+  pattern rather than specific future events.
 
 ---
 
@@ -315,5 +370,5 @@ Engineering, Institute of Engineering and Management (IEM), Kolkata.
 | Member | Contribution |
 |---|---|
 | **Debangan Mali** | Extended the project: collected the official 2018-2026 data (CPCB city AQI and 7 stations, Open-Meteo weather, NASA FIRMS fires, festival calendar) and built the extended pipeline; added the model comparison with weather, the advanced networks (attention LSTM, TCN, Transformer, forecast ranges, multi-horizon) and the learning curve; moved training to the GPU; ran all final experiments; wrote the documentation |
-| **Sweta** | Started the project: chose the problem and the Kaggle dataset, wrote the dataset audit, preprocessing and chronological split, the persistence baseline, the first LSTM and its multi-seed experiment design, and the research-rule tests |
-| **Tanisha** | Tracked project progress across every stage, from the first baseline through the extended 2018-2026 experiments and the final walk-forward evaluation; managed team communication, keeping members aligned on milestones, deadlines and deliverables; reviewed the documentation and the final report |
+| **Sweta Mandal** | Started the project: chose the problem and the Kaggle dataset, wrote the dataset audit, preprocessing and chronological split, the persistence baseline, the first LSTM and its multi-seed experiment design, and the research-rule tests |
+| **Tanisha Nandi** | Tracked project progress across every stage, from the first baseline through the extended 2018-2026 experiments and the final walk-forward evaluation; managed team communication, keeping members aligned on milestones, deadlines and deliverables; reviewed the documentation and the final report |
